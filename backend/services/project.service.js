@@ -78,7 +78,7 @@ if(!project){
      throw new Error("user does not belong to project")
 }
 
-const updatedProject = await projectModel.findOne({
+const updatedProject = await projectModel.findOneAndUpdate({
     _id:projectId
 
 },

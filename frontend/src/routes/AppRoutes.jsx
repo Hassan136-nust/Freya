@@ -3,6 +3,7 @@ import React from 'react'
 import Login from '../screens/Login'
 import Register from '../screens/Register'
 import Home from '../screens/Home'
+import Project from '../screens/Project'
 
 function AppRoutes() {
  
@@ -20,6 +21,9 @@ function AppRoutes() {
         />
         <Route
         path='/register'element={<Register/>}
+        />
+        <Route
+        path='/project/:projectId'element={<Project/>}
         />
             </Routes>
    </BrowserRouter>

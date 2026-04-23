@@ -4,6 +4,7 @@ const redisClient = new Redis({
     host: process.env.REDIS_HOST,
     port: process.env.REDIS_PORT,
     password: process.env.REDIS_PASSWORD,
+    commandTimeout: 1500,
     retryStrategy: (times) => {
         if (times > 3) {
             return null;
