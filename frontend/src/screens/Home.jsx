@@ -83,7 +83,7 @@ const Home = () => {
             <header className="bg-slate-800 text-slate-50 py-6 px-8 shadow-md">
                 <div className="max-w-7xl mx-auto flex justify-between items-center">
                     <div>
-                        <h1 className="text-4xl font-bold tracking-tight">FAYE</h1>
+                        <h1 className="text-4xl font-bold tracking-tight">FREYA</h1>
                         <p className="text-slate-300 mt-1 text-sm">AI Agent for Code Generation & Online Chat</p>
                     </div>
                     <div className="flex items-center gap-4">
