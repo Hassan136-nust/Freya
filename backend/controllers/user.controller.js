@@ -35,14 +35,19 @@ const loginController = async (req,res)=>{
 try{
     const {email , password}= req.body;
 
+    console.log('Login attempt for:', email)
+
     const user = await userModel.findOne({email}).select('+password');
 
     if(!user){
-        res.status(401).json({errors:"Invalid user"})
+        console.log('User not found:', email)
+        return res.status(401).json({errors:"Invalid user"})
     }
 
+    console.log('User found, checking password')
     const isMatch = await user.isValidPassword(password);
 
+    console.log('Password match:', isMatch)
 
     if(!isMatch){
         return res.status(401).json({errors:"Invalid credentials"})
@@ -54,6 +59,7 @@ try{
 
 }
 catch(err){
+    console.log('Login error:', err)
     res.status(400).send(err.message)
 
 }

@@ -4,7 +4,7 @@ import Login from '../screens/Login'
 import Register from '../screens/Register'
 import Home from '../screens/Home'
 import Project from '../screens/Project'
-
+import UserAuth from "../auth/UserAuth"
 function AppRoutes() {
  
 
@@ -13,7 +13,7 @@ function AppRoutes() {
     <Routes>
         <Route
         path='/'element=
-        {<Home/>}
+        {<UserAuth><Home/></UserAuth>}
         
         />
         <Route
@@ -23,7 +23,7 @@ function AppRoutes() {
         path='/register'element={<Register/>}
         />
         <Route
-        path='/project/:projectId'element={<Project/>}
+        path='/project/:projectId'element={<UserAuth><Project/></UserAuth>}
         />
             </Routes>
    </BrowserRouter>

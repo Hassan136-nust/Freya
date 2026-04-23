@@ -5,7 +5,7 @@ const connectToDB= require ("./db/db")
 const cookieParser = require("cookie-parser") 
 const userRoutes = require("./routes/user.routes")
 const projectRoutes = require("./routes/projects.routes")
-
+const router = require("./routes/ai.routes")
 const app = express();
 
 const cors = require ("cors");
@@ -19,7 +19,5 @@ app.use(express.urlencoded({extended:true}))
 app.use("/users",userRoutes)
 
 app.use("/projects",projectRoutes)
-app.get("/",(req,res)=>{
-    res.send("Jello");
-});
+app.use("/ai",router)
 module.exports= app;

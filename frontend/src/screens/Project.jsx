@@ -1,6 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useContext } from 'react'
 import { useParams } from 'react-router-dom'
 import axios from '../config/axios'
+import { initializeSocket, receiveMessage, sendMessage } from '../config/socket'
+import { UserContext } from '../context/UserContext'
 
 const Project = () => {
     const { projectId } = useParams()
@@ -11,13 +13,8 @@ const Project = () => {
     const [selectedUsers, setSelectedUsers] = useState([])
     const [members, setMembers] = useState([])
     const [project, setProject] = useState(null)
-
-    const messages = [
-        { _id: '1', sender: 'user1@example.com', text: 'Hello team!', isOwn: false },
-        { _id: '2', sender: 'you@example.com', text: 'Hi everyone!', isOwn: true },
-        { _id: '3', sender: 'user2@example.com', text: 'How is the project going?', isOwn: false },
-        { _id: '4', sender: 'you@example.com', text: 'Making good progress!', isOwn: true }
-    ]
+    const [messages, setMessages] = useState([])
+    const { user } = useContext(UserContext)
 
     // Fetch project details
     useEffect(() => {
@@ -28,6 +25,15 @@ const Project = () => {
             if (res.data.project && res.data.project.users) {
                 console.log('Members:', res.data.project.users)
                 setMembers(res.data.project.users)
+            }
+            
+            // Initialize socket after project is loaded
+            if (res.data.project && res.data.project._id) {
+                initializeSocket(res.data.project._id)
+                receiveMessage('project-message', (data) => {
+                    console.log('Message received:', data)
+                    setMessages(prev => [...prev, data])
+                })
             }
         }).catch((err) => {
             console.log('Error fetching project:', err.response?.data || err.message)
@@ -73,6 +79,19 @@ const Project = () => {
             console.log('Error adding collaborators:', err.response?.data || err.message)
         })
     }
+    
+    function send(){
+        if (!message.trim()) return;
+        console.log('Message:', message)
+        const newMsg = {
+            _id: Date.now().toString(),
+            sender: user.email,
+            message: message
+        }
+        sendMessage('project-message', newMsg)
+        setMessages(prev => [...prev, newMsg])
+        setMessage("")
+    }
 
     return (
         <div className="flex flex-col md:flex-row h-screen bg-slate-50">
@@ -108,11 +127,11 @@ const Project = () => {
                     {messages.map((msg) => (
                         <div 
                             key={msg._id}
-                            className={`flex ${msg.isOwn ? 'justify-end' : 'justify-start'}`}
+                            className={`flex ${msg.sender === user?.email ? 'justify-end' : 'justify-start'}`}
                         >
-                            <div className={`max-w-[75%] md:max-w-xs ${msg.isOwn ? 'bg-teal-600 text-slate-50' : 'bg-slate-200 text-slate-800'} rounded-lg px-3 md:px-4 py-2 md:py-3 shadow-sm`}>
+                            <div className={`max-w-[75%] md:max-w-xs ${msg.sender === user?.email ? 'bg-teal-600 text-slate-50' : 'bg-slate-200 text-slate-800'} rounded-lg px-3 md:px-4 py-2 md:py-3 shadow-sm`}>
                                 <p className="text-xs font-medium mb-1 opacity-75">{msg.sender}</p>
-                                <p className="text-sm break-words">{msg.text}</p>
+                                <p className="text-sm break-words">{msg.message}</p>
                             </div>
                         </div>
                     ))}
@@ -128,7 +147,8 @@ const Project = () => {
                             placeholder="Type a message..."
                             className="flex-1 px-3 md:px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 bg-slate-50 text-slate-900 text-sm"
                         />
-                        <button className="px-3 md:px-4 py-2 bg-teal-600 text-slate-50 rounded-lg hover:bg-teal-700 transition-colors shadow-sm flex-shrink-0">
+                        <button 
+                          onClick={send}  className="px-3 md:px-4 py-2 bg-teal-600 text-slate-50 rounded-lg hover:bg-teal-700 transition-colors shadow-sm flex-shrink-0">
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                             </svg>
