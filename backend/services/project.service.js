@@ -93,5 +93,22 @@ const updatedProject = await projectModel.findOne({
 })
 return updatedProject
 }
+const getProjectById = async ({projectId})=>{
+    if(!projectId){
+        throw new Error("ProjectId is required");
 
-module.exports= {createProject,getAllProjectByUserId,addUsersToProject};
+    }
+
+    if(!mongoose.Types.ObjectId.isValid(projectId)){
+        throw new Error("Invalid ProjectId")
+
+    }
+    const project = await projectModel.findOne({
+        _id:projectId
+    }).populate("users")
+
+    return project;
+}
+
+
+module.exports= {createProject,getAllProjectByUserId,addUsersToProject,getProjectById};

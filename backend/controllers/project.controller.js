@@ -83,5 +83,19 @@ return res.status(200).json({
     }
 
 }
+const getProjectById= async (req,res)=>{
+    const {project}=req.params;
 
-module.exports = { createProject,getAllProject,addUserToProject }; 
+    try{
+        const project = await projectService.getProjectById({projectId})
+
+        return res.status(200).json({
+            project
+        })
+    }
+    catch(err){
+        res.status(400).json(err)
+    }
+}
+
+module.exports = { createProject,getAllProject,addUserToProject,getProjectById }; 
