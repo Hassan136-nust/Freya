@@ -23,8 +23,13 @@ export const receiveMessage = (eventName,cb)=>{
     }
 }
 
- export const sendMessage = (eventName,data)=>{
-    socketInstance.emit(eventName,data)
+export const sendMessage = (eventName,data)=>{
+    if (socketInstance) {
+        console.log('Emitting event:', eventName, 'data:', data)
+        socketInstance.emit(eventName,data)
+    } else {
+        console.error('Socket not initialized!')
+    }
 }
 
 

@@ -83,6 +83,31 @@ io.on('connection', (socket) => {
         }
     })
     
+    // Handle file updates for real-time collaboration
+    socket.on('file-update', (data) => {
+        console.log('📝 File update from:', data.updatedBy, 'file:', data.fileName, 'content length:', data.content?.length)
+        console.log('Broadcasting to room:', socket.project._id.toString())
+        // Broadcast to all other users in the project room
+        socket.broadcast.to(socket.project._id.toString()).emit('file-update', data)
+        console.log('✅ Broadcasted file-update')
+    })
+    
+    // Handle new file creation
+    socket.on('file-created', (data) => {
+        console.log('📁 File created by:', data.createdBy, 'file:', data.file.name)
+        // Broadcast to all other users in the project room
+        socket.broadcast.to(socket.project._id.toString()).emit('file-created', data)
+        console.log('✅ Broadcasted file-created')
+    })
+    
+    // Handle file deletion
+    socket.on('file-deleted', (data) => {
+        console.log('🗑️ File deleted by:', data.deletedBy, 'file:', data.fileName)
+        // Broadcast to all other users in the project room
+        socket.broadcast.to(socket.project._id.toString()).emit('file-deleted', data)
+        console.log('✅ Broadcasted file-deleted')
+    })
+    
     socket.on('event', (data) => {});
     socket.on('disconnect', () => {});
 });

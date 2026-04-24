@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext } from 'react'
+import { useState, useEffect, useContext, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import axios from '../config/axios'
 import { initializeSocket, receiveMessage, sendMessage } from '../config/socket'
@@ -6,6 +6,7 @@ import { UserContext } from '../context/UserContext'
 import Markdown from "markdown-to-jsx"
 import hljs from 'highlight.js'
 import 'highlight.js/styles/github-dark.css'
+import Editor from '@monaco-editor/react'
 
 const Project = () => {
     const { projectId } = useParams()
@@ -21,6 +22,14 @@ const Project = () => {
     const [openFiles, setOpenFiles] = useState([])
     const [activeFile, setActiveFile] = useState(null)
     const { user } = useContext(UserContext)
+    const updateTimeoutRef = useRef(null)
+    const activeFileRef = useRef(null)
+
+    // Keep activeFileRef in sync with activeFile
+    useEffect(() => {
+        activeFileRef.current = activeFile
+    }, [activeFile])
+    const editorRef = useRef(null)
 
     // Fetch project details
     useEffect(() => {
@@ -34,7 +43,10 @@ const Project = () => {
 
             // Initialize socket
             if (res.data.project && res.data.project._id) {
-                initializeSocket(res.data.project._id)
+                const socketInstance = initializeSocket(res.data.project._id)
+                console.log('Socket initialized for project:', res.data.project._id)
+                
+                // Listen for chat messages
                 receiveMessage('project-message', (data) => {
                     console.log('Message received:', data)
                     
@@ -67,6 +79,66 @@ const Project = () => {
                         return [...prev, data]
                     })
                 })
+                
+                // Listen for file updates from other users
+                console.log('Setting up file-update listener')
+                receiveMessage('file-update', (data) => {
+                    console.log('🔥 File update received from:', data.updatedBy, 'file:', data.fileName, 'fileId:', data.fileId)
+                    console.log('Content length:', data.content?.length)
+                    
+                    // Update fileTree - match by fileName
+                    setFileTree(prev => {
+                        console.log('Current fileTree:', prev.map(f => ({ id: f.id, name: f.name })))
+                        const updated = prev.map(f => {
+                            if (f.name === data.fileName) {
+                                console.log('✅ Updating file:', f.name)
+                                return { ...f, content: data.content }
+                            }
+                            return f
+                        })
+                        return updated
+                    })
+                    
+                    // Update openFiles
+                    setOpenFiles(prev => prev.map(f => {
+                        if (f.name === data.fileName) {
+                            return { ...f, content: data.content }
+                        }
+                        return f
+                    }))
+                    
+                    // Update activeFile if it's the one being edited
+                    setActiveFile(prev => {
+                        if (prev && prev.name === data.fileName) {
+                            console.log('✅ Updating active file')
+                            return { ...prev, content: data.content }
+                        }
+                        return prev
+                    })
+                })
+                
+                // Listen for new files created by other users
+                receiveMessage('file-created', (data) => {
+                    console.log('📁 New file created by:', data.createdBy, 'file:', data.file.name)
+                    setFileTree(prev => {
+                        // Check if file already exists
+                        if (prev.some(f => f.name === data.file.name)) return prev
+                        return [...prev, data.file]
+                    })
+                })
+                
+                // Listen for file deletions
+                receiveMessage('file-deleted', (data) => {
+                    console.log('🗑️ File deleted by:', data.deletedBy, 'file:', data.fileName)
+                    setFileTree(prev => prev.filter(f => f.name !== data.fileName))
+                    setOpenFiles(prev => prev.filter(f => f.name !== data.fileName))
+                    setActiveFile(prev => {
+                        if (prev && prev.name === data.fileName) {
+                            return null
+                        }
+                        return prev
+                    })
+                })
             }
         }).catch((err) => {
             console.log('Error fetching project:', err.response?.data || err.message)
@@ -91,7 +163,7 @@ const Project = () => {
                         const newFile = {
                             id: Date.now() + index,
                             name: fileName,
-                            content: fileData.content,
+                            content: fileData.contents,
                             language: ext
                         };
                         
@@ -99,7 +171,7 @@ const Project = () => {
                             const existingIndex = prev.findIndex(f => f.name === fileName);
                             if (existingIndex !== -1) {
                                 const updated = [...prev];
-                                updated[existingIndex] = { ...updated[existingIndex], content: fileData.content };
+                                updated[existingIndex] = { ...updated[existingIndex], content: fileData.contents };
                                 return updated;
                             }
                             return [...prev, newFile];
@@ -181,6 +253,13 @@ const Project = () => {
                 };
                 
                 setFileTree(prev => {
+                    const existingUntitled = prev.find(f => f.name.startsWith('untitled') && f.language === language);
+                    if (existingUntitled) {
+                        const updated = [...prev];
+                        const idx = prev.indexOf(existingUntitled);
+                        updated[idx] = { ...updated[idx], content: code.trim() };
+                        return updated;
+                    }
                     if (prev.some(f => f.content === code.trim())) return prev;
                     return [...prev, newFile];
                 });
@@ -200,6 +279,118 @@ const Project = () => {
         if (activeFile?.id === fileId) {
             setActiveFile(openFiles[0] || null)
         }
+    }
+
+    const updateFileContent = (content) => {
+        const currentActiveFile = activeFileRef.current
+        if (!currentActiveFile) return
+        if (currentActiveFile.content === content) return // Prevent infinite loop when receiving socket updates
+        
+        const currentFileName = currentActiveFile.name
+        const currentFileId = currentActiveFile.id
+        
+        // Update in fileTree
+        setFileTree(prev => prev.map(f => 
+            f.name === currentFileName ? { ...f, content } : f
+        ))
+        
+        // Update in openFiles
+        setOpenFiles(prev => prev.map(f => 
+            f.name === currentFileName ? { ...f, content } : f
+        ))
+        
+        // Update activeFile
+        setActiveFile(prev => ({ ...prev, content }))
+        
+        // Debounce socket emit to avoid too many updates
+        if (updateTimeoutRef.current) {
+            clearTimeout(updateTimeoutRef.current)
+        }
+        
+        updateTimeoutRef.current = setTimeout(() => {
+            console.log('Sending file update:', currentFileName)
+            // Emit changes to other users via socket
+            sendMessage('file-update', {
+                fileId: currentFileId,
+                fileName: currentFileName,
+                content: content,
+                updatedBy: user.email
+            })
+        }, 300) // Reduced to 300ms for smoother updates
+    }
+
+    const createNewFile = () => {
+        const fileName = prompt('Enter file name (e.g., index.js, style.css, .env):')
+        if (!fileName || !fileName.trim()) return
+        
+        const ext = fileName.split('.').pop() || 'txt'
+        const newFile = {
+            id: Date.now(),
+            name: fileName.trim(),
+            content: '',
+            language: ext
+        }
+        
+        // Add to fileTree
+        setFileTree(prev => [...prev, newFile])
+        
+        // Open the new file
+        openFile(newFile)
+        
+        // Broadcast to other users
+        sendMessage('file-created', {
+            file: newFile,
+            createdBy: user.email
+        })
+    }
+
+    const deleteFile = (fileId, fileName) => {
+        if (!confirm(`Delete ${fileName}?`)) return
+        
+        // Remove from fileTree
+        setFileTree(prev => prev.filter(f => f.id !== fileId))
+        
+        // Remove from openFiles
+        setOpenFiles(prev => prev.filter(f => f.id !== fileId))
+        
+        // Clear activeFile if it's the deleted one
+        if (activeFile?.id === fileId) {
+            setActiveFile(null)
+        }
+        
+        // Broadcast to other users
+        sendMessage('file-deleted', {
+            fileId: fileId,
+            fileName: fileName,
+            deletedBy: user.email
+        })
+    }
+
+    const handleEditorDidMount = (editor, monaco) => {
+        editorRef.current = editor
+    }
+
+    const getLanguageFromFileName = (fileName) => {
+        const ext = fileName.split('.').pop().toLowerCase()
+        const languageMap = {
+            'js': 'javascript',
+            'jsx': 'javascript',
+            'ts': 'typescript',
+            'tsx': 'typescript',
+            'py': 'python',
+            'java': 'java',
+            'cpp': 'cpp',
+            'c': 'c',
+            'cs': 'csharp',
+            'html': 'html',
+            'css': 'css',
+            'json': 'json',
+            'md': 'markdown',
+            'sql': 'sql',
+            'sh': 'shell',
+            'env': 'plaintext'
+        }
+        return languageMap[ext] || 'plaintext'
     }
 
     const toggleUserSelection = (userId) => {
@@ -359,8 +550,17 @@ const Project = () => {
             <div className="flex-1 flex">
                 {/* File Explorer */}
                 <div className="w-64 bg-slate-800 border-r border-slate-700 flex flex-col">
-                    <div className="px-4 py-3 border-b border-slate-700">
+                    <div className="px-4 py-3 border-b border-slate-700 flex justify-between items-center">
                         <h3 className="text-slate-200 text-sm font-semibold">EXPLORER</h3>
+                        <button
+                            onClick={createNewFile}
+                            className="text-teal-400 hover:text-teal-300 transition-colors"
+                            title="New File"
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                            </svg>
+                        </button>
                     </div>
                     <div className="flex-1 overflow-y-auto">
                         {fileTree.length === 0 ? (
@@ -370,16 +570,27 @@ const Project = () => {
                                 {fileTree.map((file) => (
                                     <div
                                         key={file.id}
-                                        onClick={() => openFile(file)}
-                                        className={`px-4 py-2 text-sm cursor-pointer hover:bg-slate-700 ${activeFile?.id === file.id ? 'bg-slate-700 text-teal-400' : 'text-slate-300'
+                                        className={`group px-4 py-2 text-sm cursor-pointer hover:bg-slate-700 flex items-center justify-between ${activeFile?.id === file.id ? 'bg-slate-700 text-teal-400' : 'text-slate-300'
                                             }`}
                                     >
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex items-center gap-2" onClick={() => openFile(file)}>
                                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                             </svg>
                                             <span>{file.name}</span>
                                         </div>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                deleteFile(file.id, file.name)
+                                            }}
+                                            className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300 transition-opacity"
+                                            title="Delete file"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                            </svg>
+                                        </button>
                                     </div>
                                 ))}
                             </div>
@@ -414,20 +625,30 @@ const Project = () => {
                         </div>
                     )}
 
-                    {/* Code Display */}
+                    {/* Monaco Editor */}
                     <div className="flex-1 overflow-auto">
                         {activeFile ? (
-                            <pre className="p-4 text-sm text-slate-200 font-mono h-full bg-slate-900">
-                                <code
-                                    className={`hljs language-${activeFile.language || 'plaintext'}`}
-                                    dangerouslySetInnerHTML={{
-                                        __html: hljs.highlight(
-                                            activeFile.content,
-                                            { language: hljs.getLanguage(activeFile.language) ? activeFile.language : 'plaintext' }
-                                        ).value
-                                    }}
-                                />
-                            </pre>
+                            <Editor
+                                height="100%"
+                                language={getLanguageFromFileName(activeFile.name)}
+                                value={activeFile.content}
+                                theme="vs-dark"
+                                onMount={handleEditorDidMount}
+                                onChange={(value) => updateFileContent(value)}
+                                options={{
+                                    minimap: { enabled: false },
+                                    fontSize: 14,
+                                    fontFamily: 'Consolas, "Courier New", monospace',
+                                    lineNumbers: 'on',
+                                    scrollBeyondLastLine: false,
+                                    automaticLayout: true,
+                                    wordWrap: 'on',
+                                    tabSize: 2,
+                                    renderWhitespace: 'selection',
+                                    bracketPairColorization: { enabled: true },
+                                    padding: { top: 16, bottom: 16 }
+                                }}
+                            />
                         ) : (
                             <div className="flex items-center justify-center h-full text-slate-400">
                                 <p>No file selected</p>
