@@ -110,5 +110,38 @@ const getProjectById = async ({projectId})=>{
     return project;
 }
 
+const updateProjectFiles = async ({ projectId, userId, files }) => {
+    if (!projectId) throw new Error("ProjectId is required");
+    if (!userId) throw new Error("UserId is required");
+    if (!Array.isArray(files)) throw new Error("files must be an array");
 
-module.exports= {createProject,getAllProjectByUserId,addUsersToProject,getProjectById};
+    if (!mongoose.Types.ObjectId.isValid(projectId)) {
+        throw new Error("Invalid ProjectId");
+    }
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+        throw new Error("Invalid UserId");
+    }
+
+    const sanitizedFiles = files.map((file) => ({
+        name: String(file.name || "").trim(),
+        content: file.content || "",
+        language: file.language || "plaintext"
+    }));
+
+    const updatedProject = await projectModel.findOneAndUpdate({
+        _id: projectId,
+        users: userId
+    }, {
+        $set: { files: sanitizedFiles }
+    }, {
+        new: true
+    });
+
+    if (!updatedProject) {
+        throw new Error("user does not belong to project");
+    }
+    return updatedProject;
+};
+
+
+module.exports= {createProject,getAllProjectByUserId,addUsersToProject,getProjectById,updateProjectFiles};

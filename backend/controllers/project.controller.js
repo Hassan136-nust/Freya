@@ -99,4 +99,26 @@ const getProjectById= async (req,res)=>{
     }
 }
 
-module.exports = { createProject,getAllProject,addUserToProject,getProjectById }; 
+const updateProjectFiles = async (req, res) => {
+    const { projectId } = req.params;
+    const { files } = req.body;
+
+    try {
+        const loggedInUser = await userModel.findOne({ email: req.user.email });
+        if (!loggedInUser) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        const project = await projectService.updateProjectFiles({
+            projectId,
+            userId: loggedInUser._id,
+            files
+        });
+
+        return res.status(200).json({ project });
+    } catch (err) {
+        return res.status(400).json({ error: err.message });
+    }
+}
+
+module.exports = { createProject,getAllProject,addUserToProject,getProjectById,updateProjectFiles }; 

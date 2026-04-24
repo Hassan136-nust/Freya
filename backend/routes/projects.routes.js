@@ -29,4 +29,10 @@ router.get("/get-project/:projectId",
     projectController.getProjectById
 )
 
+router.put("/files/:projectId",
+    authUser,
+    body('files').isArray().withMessage("files must be an array"),
+    projectController.updateProjectFiles
+)
+
 module.exports = router;

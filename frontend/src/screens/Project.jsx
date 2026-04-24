@@ -1,271 +1,336 @@
-import { useState, useEffect, useContext, useRef } from 'react'
+import { useState, useEffect, useContext, useRef, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
 import axios from '../config/axios'
 import { initializeSocket, receiveMessage, sendMessage } from '../config/socket'
 import { UserContext } from '../context/UserContext'
 import Markdown from "markdown-to-jsx"
-import hljs from 'highlight.js'
-import 'highlight.js/styles/github-dark.css'
 import Editor from '@monaco-editor/react'
+import { getWebContainer } from "../config/webContainer"
 
 const Project = () => {
     const { projectId } = useParams()
+    const { user } = useContext(UserContext)
+
     const [isMembersPanelOpen, setIsMembersPanelOpen] = useState(false)
     const [isAddCollaboratorOpen, setIsAddCollaboratorOpen] = useState(false)
     const [message, setMessage] = useState('')
     const [allUsers, setAllUsers] = useState([])
     const [selectedUsers, setSelectedUsers] = useState([])
     const [members, setMembers] = useState([])
-    const [project, setProject] = useState(null)
     const [messages, setMessages] = useState([])
     const [fileTree, setFileTree] = useState([])
     const [openFiles, setOpenFiles] = useState([])
     const [activeFile, setActiveFile] = useState(null)
-    const { user } = useContext(UserContext)
-    const updateTimeoutRef = useRef(null)
-    const activeFileRef = useRef(null)
+    const [webContainer, setWebContainer] = useState(null)
+    const [isRunning, setIsRunning] = useState(false)
+    const [runLogs, setRunLogs] = useState('')
+    const [iframeUrl, setIframeUrl] = useState('')
+    const [editableUrl, setEditableUrl] = useState('')
+    const [iframeDoc, setIframeDoc] = useState('')
+    const [hasRunPreview, setHasRunPreview] = useState(false)
 
-    // Keep activeFileRef in sync with activeFile
+    const activeFileRef = useRef(null)
+    const updateTimeoutRef = useRef(null)
+    const persistTimerRef = useRef(null)
+    const loadedProjectRef = useRef(false)
+    const runningProcessRef = useRef(null)
+
+    const sanitizeFileName = useCallback((rawName = '') => {
+        return String(rawName)
+            .replace(/\*\*/g, '')
+            .replace(/^["'`]+|["'`]+$/g, '')
+            .trim()
+    }, [])
+
+    const applyFileTreeFromJson = useCallback((jsonData) => {
+        if (!jsonData || typeof jsonData !== 'object' || !jsonData.fileTree || typeof jsonData.fileTree !== 'object') {
+            return false
+        }
+
+        Object.entries(jsonData.fileTree).forEach(([rawFileName, fileData], index) => {
+            const fileName = sanitizeFileName(rawFileName)
+            if (!fileName) return
+            const ext = fileName.split('.').pop()
+            const contents = typeof fileData?.contents === 'string' ? fileData.contents : ''
+            const newFile = {
+                id: Date.now() + index,
+                name: fileName,
+                content: contents,
+                language: ext
+            }
+            setFileTree(prev => {
+                const existingIndex = prev.findIndex(f => f.name === fileName)
+                if (existingIndex !== -1) {
+                    const updated = [...prev]
+                    updated[existingIndex] = { ...updated[existingIndex], content: contents, language: ext }
+                    return updated
+                }
+                return [...prev, newFile]
+            })
+        })
+
+        return true
+    }, [sanitizeFileName])
+
+    const extractFilesFromMessage = useCallback((data) => {
+        const message = data.message
+        if (!message || typeof message !== 'string') return
+
+        try {
+            const jsonMatch = message.match(/\{[\s\S]*"fileTree"[\s\S]*\}/)
+            if (jsonMatch) {
+                const jsonData = JSON.parse(jsonMatch[0])
+                const applied = applyFileTreeFromJson(jsonData)
+                if (applied) {
+                    return
+                }
+            }
+            // Handle escaped JSON payloads sometimes returned by AI.
+            const escapedJsonMatch = message.match(/"\{[\s\S]*\\"fileTree\\"[\s\S]*\}"/)
+            if (escapedJsonMatch) {
+                const unescaped = JSON.parse(escapedJsonMatch[0])
+                const jsonData = JSON.parse(unescaped)
+                const applied = applyFileTreeFromJson(jsonData)
+                if (applied) return
+            }
+        } catch {
+            // Continue with markdown/fenced parsing fallbacks.
+        }
+
+        let filePattern = /\*\*([a-zA-Z0-9_./-]+\.[a-zA-Z0-9]+):\*\*\s*```(\w+)?\n([\s\S]*?)```/g
+        let matches = [...message.matchAll(filePattern)]
+        if (matches.length === 0) {
+            filePattern = /\*\*([a-zA-Z0-9_./-]+\.[a-zA-Z0-9]+)\*\*\s*```(\w+)?\n([\s\S]*?)```/g
+            matches = [...message.matchAll(filePattern)]
+        }
+        if (matches.length === 0) {
+            // Fallback: filename on plain line, followed by fenced code block.
+            filePattern = /(?:^|\n)\s*([a-zA-Z0-9_./-]+\.[a-zA-Z0-9]+)\s*:?\s*\n```(\w+)?\n([\s\S]*?)```/g
+            matches = [...message.matchAll(filePattern)]
+        }
+
+        if (matches.length > 0) {
+            matches.forEach((match, index) => {
+                const fileName = sanitizeFileName(match[1].trim())
+                if (!fileName) return
+                const language = match[2] || fileName.split('.').pop()
+                const code = match[3]
+                const newFile = {
+                    id: Date.now() + index,
+                    name: fileName,
+                    content: code.trim(),
+                    language: language
+                }
+                setFileTree(prev => {
+                    const existingIndex = prev.findIndex(f => f.name === fileName)
+                    if (existingIndex !== -1) {
+                        const updated = [...prev]
+                        updated[existingIndex] = { ...updated[existingIndex], content: code.trim(), language }
+                        return updated
+                    }
+                    return [...prev, newFile]
+                })
+            })
+        } else {
+            const inferFileNameFromContext = (fullText, blockIndex, language, fallbackIndex) => {
+                const context = fullText.slice(Math.max(0, blockIndex - 220), blockIndex)
+
+                const patterns = [
+                    /\*\*([a-zA-Z0-9_./-]+\.[a-zA-Z0-9]+)\*\*\s*:?$/m,
+                    /(?:file|filename|path)\s*:\s*([a-zA-Z0-9_./-]+\.[a-zA-Z0-9]+)/im,
+                    /([a-zA-Z0-9_./-]+\.[a-zA-Z0-9]+)\s*:?\s*$/m
+                ]
+
+                for (const pattern of patterns) {
+                    const m = context.match(pattern)
+                    if (m && m[1]) {
+                        const cleaned = sanitizeFileName(m[1])
+                        if (cleaned) return cleaned
+                    }
+                }
+
+                if (language === 'html') return 'index.html'
+                if (language === 'css') return 'style.css'
+                if (language === 'javascript' || language === 'js') return 'script.js'
+
+                const extensionMap = {
+                    javascript: 'js',
+                    typescript: 'ts',
+                    python: 'py',
+                    java: 'java',
+                    cpp: 'cpp',
+                    c: 'c',
+                    csharp: 'cs',
+                    html: 'html',
+                    css: 'css',
+                    json: 'json',
+                    markdown: 'md',
+                    bash: 'sh',
+                    shell: 'sh',
+                    sql: 'sql',
+                    env: 'env',
+                    jsx: 'jsx',
+                    tsx: 'tsx'
+                }
+                const ext = extensionMap[language] || language || 'txt'
+                return `untitled-${Date.now()}-${fallbackIndex}.${ext}`
+            }
+
+            const simplePattern = /```(\w+)\n([\s\S]*?)```/g
+            const simpleMatches = [...message.matchAll(simplePattern)]
+            simpleMatches.forEach((match, index) => {
+                const language = (match[1] || 'txt').toLowerCase()
+                const code = match[2]
+                if (['filetree', 'commands', 'bash', 'sh'].includes(language)) return
+
+                if (language === 'json' && code.includes('"fileTree"')) {
+                    try {
+                        const parsed = JSON.parse(code)
+                        const applied = applyFileTreeFromJson(parsed)
+                        if (applied) return
+                    } catch {
+                        // Continue with fallback untitled file creation.
+                    }
+                }
+                const blockStartIndex = typeof match.index === 'number' ? match.index : 0
+                const fileName = inferFileNameFromContext(message, blockStartIndex, language, index)
+                const newFile = {
+                    id: Date.now() + index,
+                    name: fileName,
+                    content: code.trim(),
+                    language: language
+                }
+                setFileTree(prev => {
+                    const existingUntitled = prev.find(f => f.name.startsWith('untitled') && f.language === language)
+                    if (existingUntitled) {
+                        const updated = [...prev]
+                        const idx = prev.indexOf(existingUntitled)
+                        updated[idx] = { ...updated[idx], content: code.trim() }
+                        return updated
+                    }
+                    if (prev.some(f => f.content === code.trim())) return prev
+                    return [...prev, newFile]
+                })
+            })
+        }
+    }, [sanitizeFileName, applyFileTreeFromJson])
+
+    const closePreview = useCallback(() => {
+        if (runningProcessRef.current?.kill) {
+            try {
+                runningProcessRef.current.kill()
+            } catch {
+                // Ignore stop errors.
+            }
+            runningProcessRef.current = null
+        }
+        setHasRunPreview(false)
+        setIframeDoc('')
+        setIframeUrl('')
+        setEditableUrl('')
+        setIsRunning(false)
+        setRunLogs((prev) => `${prev}\nPreview closed.\n`)
+    }, [])
+
     useEffect(() => {
         activeFileRef.current = activeFile
     }, [activeFile])
-    const editorRef = useRef(null)
 
-    // Fetch project details
+    useEffect(() => {
+        let mounted = true
+        getWebContainer()
+            .then((container) => {
+                if (!mounted) return
+                setWebContainer(container)
+                container.on('server-ready', (_, url) => {
+                    setIframeDoc('')
+                    setIframeUrl(url)
+                    setEditableUrl(url)
+                })
+            })
+            .catch((err) => console.error('WebContainer boot failed:', err))
+        return () => {
+            mounted = false
+        }
+    }, [])
+
     useEffect(() => {
         axios.get(`/projects/get-project/${projectId}`).then((res) => {
-            console.log('Project details:', res.data)
-            setProject(res.data.project)
-            if (res.data.project && res.data.project.users) {
-                console.log('Members:', res.data.project.users)
-                setMembers(res.data.project.users)
-            }
+            const project = res.data.project
+            if (!project) return
+            setMembers(project.users || [])
+            const savedFiles = Array.isArray(project.files) ? project.files : []
+            const normalizedFiles = savedFiles.map((file, index) => ({
+                id: `${sanitizeFileName(file.name)}-${index}-${Date.now()}`,
+                name: sanitizeFileName(file.name),
+                content: file.content || '',
+                language: file.language || (sanitizeFileName(file.name).split('.').pop() || 'plaintext')
+            })).filter(file => file.name)
+            setFileTree(normalizedFiles)
+            loadedProjectRef.current = true
 
-            // Initialize socket
-            if (res.data.project && res.data.project._id) {
-                const socketInstance = initializeSocket(res.data.project._id)
-                console.log('Socket initialized for project:', res.data.project._id)
-                
-                // Listen for chat messages
+            if (project._id) {
+                initializeSocket(project._id)
+
                 receiveMessage('project-message', (data) => {
-                    console.log('Message received:', data)
-                    
                     setMessages(prev => {
                         if (data.isChunk) {
-                            const messageIndex = prev.findIndex(m => m._id === data._id);
-                            if (messageIndex !== -1) {
-                                const newMessages = [...prev];
-                                newMessages[messageIndex] = {
-                                    ...newMessages[messageIndex],
-                                    message: newMessages[messageIndex].message + data.message
-                                };
-                                
-                                // Check if complete message has code blocks
-                                if (newMessages[messageIndex].message.includes('```')) {
-                                    extractFilesFromMessage(newMessages[messageIndex])
-                                }
-                                
-                                return newMessages;
+                            const idx = prev.findIndex(m => m._id === data._id)
+                            if (idx === -1) return prev
+                            const next = [...prev]
+                            next[idx] = { ...next[idx], message: `${next[idx].message || ''}${data.message || ''}` }
+                            const completeFencePairs = ((next[idx].message.match(/```/g) || []).length % 2) === 0
+                            const hasCodeFence = next[idx].message.includes('```')
+                            if (
+                                next[idx].message.includes('"fileTree"') ||
+                                (hasCodeFence && completeFencePairs)
+                            ) {
+                                extractFilesFromMessage(next[idx])
                             }
-                            return prev;
+                            return next
                         }
-                        
-                        // Check if new message contains code
-                        if (data.message && data.message.includes('```')) {
+                        if (data.message && (data.message.includes('```') || data.message.includes('"fileTree"'))) {
                             extractFilesFromMessage(data)
                         }
-                        
-                        if (prev.some(m => m._id === data._id)) return prev;
+                        if (prev.some(m => m._id === data._id)) return prev
                         return [...prev, data]
                     })
                 })
-                
-                // Listen for file updates from other users
-                console.log('Setting up file-update listener')
+
                 receiveMessage('file-update', (data) => {
-                    console.log('🔥 File update received from:', data.updatedBy, 'file:', data.fileName, 'fileId:', data.fileId)
-                    console.log('Content length:', data.content?.length)
-                    
-                    // Update fileTree - match by fileName
-                    setFileTree(prev => {
-                        console.log('Current fileTree:', prev.map(f => ({ id: f.id, name: f.name })))
-                        const updated = prev.map(f => {
-                            if (f.name === data.fileName) {
-                                console.log('✅ Updating file:', f.name)
-                                return { ...f, content: data.content }
-                            }
-                            return f
-                        })
-                        return updated
-                    })
-                    
-                    // Update openFiles
-                    setOpenFiles(prev => prev.map(f => {
-                        if (f.name === data.fileName) {
-                            return { ...f, content: data.content }
-                        }
-                        return f
-                    }))
-                    
-                    // Update activeFile if it's the one being edited
-                    setActiveFile(prev => {
-                        if (prev && prev.name === data.fileName) {
-                            console.log('✅ Updating active file')
-                            return { ...prev, content: data.content }
-                        }
-                        return prev
-                    })
+                    setFileTree(prev => prev.map(f => f.name === data.fileName ? { ...f, content: data.content } : f))
+                    setOpenFiles(prev => prev.map(f => f.name === data.fileName ? { ...f, content: data.content } : f))
+                    setActiveFile(prev => prev && prev.name === data.fileName ? { ...prev, content: data.content } : prev)
                 })
-                
-                // Listen for new files created by other users
+
                 receiveMessage('file-created', (data) => {
-                    console.log('📁 New file created by:', data.createdBy, 'file:', data.file.name)
-                    setFileTree(prev => {
-                        // Check if file already exists
-                        if (prev.some(f => f.name === data.file.name)) return prev
-                        return [...prev, data.file]
-                    })
+                    setFileTree(prev => prev.some(f => f.name === data.file.name) ? prev : [...prev, data.file])
                 })
-                
-                // Listen for file deletions
+
                 receiveMessage('file-deleted', (data) => {
-                    console.log('🗑️ File deleted by:', data.deletedBy, 'file:', data.fileName)
                     setFileTree(prev => prev.filter(f => f.name !== data.fileName))
                     setOpenFiles(prev => prev.filter(f => f.name !== data.fileName))
-                    setActiveFile(prev => {
-                        if (prev && prev.name === data.fileName) {
-                            return null
-                        }
-                        return prev
-                    })
+                    setActiveFile(prev => prev && prev.name === data.fileName ? null : prev)
                 })
             }
         }).catch((err) => {
             console.log('Error fetching project:', err.response?.data || err.message)
         })
-    }, [projectId])
+    }, [projectId, sanitizeFileName, extractFilesFromMessage])
 
-    // Extract files from AI message
-    const extractFilesFromMessage = (data) => {
-        const message = data.message
-        
-        console.log('Extracting files from message')
-        
-        // Try to parse JSON format first
-        try {
-            const jsonMatch = message.match(/\{[\s\S]*"fileTree"[\s\S]*\}/);
-            if (jsonMatch) {
-                const jsonData = JSON.parse(jsonMatch[0]);
-                if (jsonData.fileTree) {
-                    console.log('Found fileTree in JSON format');
-                    Object.entries(jsonData.fileTree).forEach(([fileName, fileData], index) => {
-                        const ext = fileName.split('.').pop();
-                        const newFile = {
-                            id: Date.now() + index,
-                            name: fileName,
-                            content: fileData.contents,
-                            language: ext
-                        };
-                        
-                        setFileTree(prev => {
-                            const existingIndex = prev.findIndex(f => f.name === fileName);
-                            if (existingIndex !== -1) {
-                                const updated = [...prev];
-                                updated[existingIndex] = { ...updated[existingIndex], content: fileData.contents };
-                                return updated;
-                            }
-                            return [...prev, newFile];
-                        });
-                    });
-                    return;
-                }
-            }
-        } catch (e) {
-            console.log('No JSON format found, trying markdown');
+    useEffect(() => {
+        if (!loadedProjectRef.current) return
+        if (persistTimerRef.current) clearTimeout(persistTimerRef.current)
+        persistTimerRef.current = setTimeout(() => {
+            const files = fileTree.map(({ name, content, language }) => ({ name, content, language }))
+            axios.put(`/projects/files/${projectId}`, { files }).catch((err) => {
+                console.error('Unable to persist files:', err.response?.data || err.message)
+            })
+        }, 500)
+        return () => {
+            if (persistTimerRef.current) clearTimeout(persistTimerRef.current)
         }
-        
-        // Try markdown format: **filename.ext:** followed by code block
-        let filePattern = /\*\*([a-zA-Z0-9_\-\.\/]+\.[a-zA-Z0-9]+):\*\*\s*```(\w+)?\n([\s\S]*?)```/g;
-        let matches = [...message.matchAll(filePattern)];
-        
-        // Alternative pattern: **filename.ext** followed by code block
-        if (matches.length === 0) {
-            filePattern = /\*\*([a-zA-Z0-9_\-\.\/]+\.[a-zA-Z0-9]+)\*\*\s*```(\w+)?\n([\s\S]*?)```/g;
-            matches = [...message.matchAll(filePattern)];
-        }
-        
-        console.log('Found', matches.length, 'files with names in markdown');
-        
-        if (matches.length > 0) {
-            matches.forEach((match, index) => {
-                const fileName = match[1].trim();
-                const language = match[2] || fileName.split('.').pop();
-                const code = match[3];
-                
-                console.log('Extracted file:', fileName);
-                
-                const newFile = {
-                    id: Date.now() + index,
-                    name: fileName,
-                    content: code.trim(),
-                    language: language
-                };
-                
-                setFileTree(prev => {
-                    const existingIndex = prev.findIndex(f => f.name === fileName);
-                    if (existingIndex !== -1) {
-                        const updated = [...prev];
-                        updated[existingIndex] = { ...updated[existingIndex], content: code.trim() };
-                        return updated;
-                    }
-                    return [...prev, newFile];
-                });
-            });
-        } else {
-            // Fallback: simple code blocks
-            const simplePattern = /```(\w+)\n([\s\S]*?)```/g;
-            const simpleMatches = [...message.matchAll(simplePattern)];
-            
-            console.log('Found', simpleMatches.length, 'code blocks without names');
-            
-            simpleMatches.forEach((match, index) => {
-                const language = (match[1] || 'txt').toLowerCase();
-                const code = match[2];
-                
-                if (['filetree', 'commands', 'bash', 'sh'].includes(language)) return;
-                
-                const extensionMap = {
-                    'javascript': 'js', 'typescript': 'ts', 'python': 'py',
-                    'java': 'java', 'cpp': 'cpp', 'c': 'c', 'csharp': 'cs',
-                    'html': 'html', 'css': 'css', 'json': 'json',
-                    'markdown': 'md', 'bash': 'sh', 'shell': 'sh',
-                    'sql': 'sql', 'env': 'env', 'jsx': 'jsx', 'tsx': 'tsx'
-                };
-                
-                const ext = extensionMap[language.toLowerCase()] || language;
-                const fileName = `untitled${fileTree.length + index + 1}.${ext}`;
-                
-                const newFile = {
-                    id: Date.now() + index,
-                    name: fileName,
-                    content: code.trim(),
-                    language: language
-                };
-                
-                setFileTree(prev => {
-                    const existingUntitled = prev.find(f => f.name.startsWith('untitled') && f.language === language);
-                    if (existingUntitled) {
-                        const updated = [...prev];
-                        const idx = prev.indexOf(existingUntitled);
-                        updated[idx] = { ...updated[idx], content: code.trim() };
-                        return updated;
-                    }
-                    if (prev.some(f => f.content === code.trim())) return prev;
-                    return [...prev, newFile];
-                });
-            });
-        }
-    }
+    }, [fileTree, projectId])
 
     const openFile = (file) => {
         if (!openFiles.find(f => f.id === file.id)) {
@@ -323,10 +388,12 @@ const Project = () => {
         const fileName = prompt('Enter file name (e.g., index.js, style.css, .env):')
         if (!fileName || !fileName.trim()) return
         
-        const ext = fileName.split('.').pop() || 'txt'
+        const sanitizedName = sanitizeFileName(fileName)
+        if (!sanitizedName) return
+        const ext = sanitizedName.split('.').pop() || 'txt'
         const newFile = {
             id: Date.now(),
-            name: fileName.trim(),
+            name: sanitizedName,
             content: '',
             language: ext
         }
@@ -364,10 +431,6 @@ const Project = () => {
             fileName: fileName,
             deletedBy: user.email
         })
-    }
-
-    const handleEditorDidMount = (editor, monaco) => {
-        editorRef.current = editor
     }
 
     const getLanguageFromFileName = (fileName) => {
@@ -444,6 +507,137 @@ const Project = () => {
         setMessage("")
     }
 
+    const toWebContainerTree = () => {
+        const tree = {}
+        fileTree.forEach((file) => {
+            const safeName = sanitizeFileName(file.name)
+            if (!safeName) return
+            tree[safeName] = { file: { contents: file.content || '' } }
+        })
+        return tree
+    }
+
+    const runInWebContainer = async () => {
+        if (!webContainer || fileTree.length === 0) return
+        try {
+            setIsRunning(true)
+            setHasRunPreview(true)
+            setRunLogs('Starting...\n')
+            setIframeDoc('')
+            setIframeUrl('')
+            setEditableUrl('')
+
+            if (runningProcessRef.current?.kill) {
+                try {
+                    runningProcessRef.current.kill()
+                } catch {
+                    // Ignore process kill failures before starting a fresh run.
+                }
+                runningProcessRef.current = null
+            }
+
+            const normalizedTree = toWebContainerTree()
+            let packageFile = fileTree.find((f) => f.name === 'package.json')
+            const hasPackageJson = Boolean(packageFile)
+            const htmlFile = fileTree.find((f) => f.name.endsWith('.html'))
+
+            let runTarget = hasPackageJson ? 'node' : 'html'
+            if (hasPackageJson && htmlFile) {
+                const choice = (prompt('Both package.json and HTML found.\nType "node" to run package scripts or "html" to preview HTML file.', 'node') || 'node')
+                    .trim()
+                    .toLowerCase()
+                runTarget = choice === 'html' ? 'html' : 'node'
+            }
+
+            if (!hasPackageJson) {
+                const hasNodeSource = fileTree.some((file) => {
+                    const name = file.name.toLowerCase()
+                    const isJsLike = name.endsWith('.js') || name.endsWith('.mjs') || name.endsWith('.cjs')
+                    return isJsLike && !name.endsWith('.test.js')
+                })
+                const hasHtml = fileTree.some((f) => f.name.endsWith('.html'))
+
+                if (hasNodeSource && !hasHtml) {
+                    const autoPackageJson = {
+                        name: "webcontainer-app",
+                        version: "1.0.0",
+                        private: true,
+                        main: fileTree.some(f => f.name === 'server.js') ? "server.js" : (fileTree.some(f => f.name === 'app.js') ? "app.js" : "index.js"),
+                        scripts: {
+                            start: fileTree.some(f => f.name === 'server.js') ? "node server.js" : (fileTree.some(f => f.name === 'app.js') ? "node app.js" : "node index.js")
+                        }
+                    }
+                    const packageContent = JSON.stringify(autoPackageJson, null, 2)
+                    normalizedTree['package.json'] = { file: { contents: packageContent } }
+                    packageFile = { name: 'package.json', content: packageContent, language: 'json' }
+
+                    setFileTree(prev => prev.some(f => f.name === 'package.json')
+                        ? prev
+                        : [...prev, { id: Date.now(), name: 'package.json', content: packageContent, language: 'json' }]
+                    )
+                    setRunLogs((prev) => `${prev}Auto-created package.json for Node project.\n`)
+                }
+            }
+
+            await webContainer.mount(normalizedTree)
+
+            const hasRunnablePackage = Boolean(packageFile)
+
+            if (runTarget === 'html' || !hasRunnablePackage) {
+                const html = htmlFile || fileTree.find((f) => f.name.endsWith('.html'))
+                if (html) {
+                    const css = fileTree.find((f) => f.name === 'style.css')?.content || ''
+                    const js = fileTree.find((f) => f.name === 'script.js')?.content || ''
+                    const mergedHtml = `
+${html.content || ''}
+${css ? `\n<style>\n${css}\n</style>\n` : ''}
+${js ? `\n<script>\n${js}\n</script>\n` : ''}
+`
+                    setIframeUrl('')
+                    setEditableUrl('')
+                    setIframeDoc(mergedHtml || '<h1>No HTML content</h1>')
+                    setRunLogs('Rendered HTML/CSS/JS in iframe preview.\n')
+                } else {
+                    setRunLogs('No package.json or HTML file found to run.\n')
+                }
+                return
+            }
+
+            const install = await webContainer.spawn('npm', ['install'])
+            install.output.pipeTo(new WritableStream({
+                write(data) {
+                    setRunLogs((prev) => prev + data)
+                }
+            }))
+            const installExit = await install.exit
+            if (installExit !== 0) {
+                setRunLogs((prev) => prev + '\nnpm install failed.\n')
+                return
+            }
+
+            let startCommand = ['run', 'start']
+            try {
+                const pkg = JSON.parse(packageFile.content || '{}')
+                if (pkg?.scripts?.start) startCommand = ['run', 'start']
+                else if (pkg?.scripts?.dev) startCommand = ['run', 'dev']
+            } catch {
+                startCommand = ['run', 'start']
+            }
+
+            const startProcess = await webContainer.spawn('npm', startCommand)
+            runningProcessRef.current = startProcess
+            startProcess.output.pipeTo(new WritableStream({
+                write(data) {
+                    setRunLogs((prev) => prev + data)
+                }
+            }))
+        } catch (err) {
+            setRunLogs((prev) => `${prev}\nRun error: ${err.message}\n`)
+        } finally {
+            setIsRunning(false)
+        }
+    }
+
     return (
         <div className="flex h-screen bg-slate-50">
             {/* Left Side - Chat Panel */}
@@ -484,7 +678,11 @@ const Project = () => {
                                 <p className="text-xs font-medium mb-1 opacity-75">{msg.sender}</p>
                                 <div className="text-sm markdown-content">
                                     {msg.message ? (
-                                        <Markdown>
+                                        <Markdown
+                                            options={{
+                                                disableParsingRawHTML: true
+                                            }}
+                                        >
                                             {(() => {
                                                 if (msg.sender !== 'Freya-AI') return msg.message;
                                                 
@@ -497,16 +695,18 @@ const Project = () => {
                                                         const jsonData = JSON.parse(jsonMatch[0]);
                                                         return jsonData.text || "I've generated the files for you. Check the explorer!";
                                                     }
-                                                } catch (e) {}
+                                                } catch {
+                                                    displayMessage = msg.message;
+                                                }
                                                 
                                                 // Handle Markdown format - remove file blocks and ALL code blocks
-                                                const filePattern = /\*\*([a-zA-Z0-9_\-\.\/]+\.[a-zA-Z0-9]+):\*\*\s*```(\w+)?\n([\s\S]*?)```/g;
-                                                displayMessage = displayMessage.replace(filePattern, (match, fileName) => {
+                                                const filePattern = /\*\*([a-zA-Z0-9_./-]+\.[a-zA-Z0-9]+):\*\*\s*```(\w+)?\n([\s\S]*?)```/g;
+                                                displayMessage = displayMessage.replace(filePattern, (_match, fileName) => {
                                                     return `*File: ${fileName} (view in explorer)*`;
                                                 });
                                                 
                                                 // Also hide any remaining naked code blocks
-                                                displayMessage = displayMessage.replace(/```(\w+)?\n([\s\S]*?)```/g, (match, lang) => {
+                                                displayMessage = displayMessage.replace(/```(\w+)?\n([\s\S]*?)```/g, (_match, lang) => {
                                                     if (lang === 'filetree' || lang === 'commands') return '';
                                                     return `*Code block (${lang || 'text'}) - view in explorer*`;
                                                 });
@@ -600,6 +800,16 @@ const Project = () => {
 
                 {/* Editor Area */}
                 <div className="flex-1 flex flex-col bg-slate-900">
+                    <div className="px-4 py-2 border-b border-slate-700 bg-slate-800 flex items-center justify-between gap-3">
+                        <h3 className="text-slate-200 text-sm font-semibold">EDITOR</h3>
+                        <button
+                            onClick={runInWebContainer}
+                            disabled={isRunning || fileTree.length === 0}
+                            className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-slate-50 text-sm rounded disabled:bg-slate-500 disabled:cursor-not-allowed"
+                        >
+                            {isRunning ? 'Running...' : 'Run'}
+                        </button>
+                    </div>
                     {/* Tabs */}
                     {openFiles.length > 0 && (
                         <div className="flex bg-slate-800 border-b border-slate-700 overflow-x-auto">
@@ -626,34 +836,75 @@ const Project = () => {
                     )}
 
                     {/* Monaco Editor */}
-                    <div className="flex-1 overflow-auto">
-                        {activeFile ? (
-                            <Editor
-                                height="100%"
-                                language={getLanguageFromFileName(activeFile.name)}
-                                value={activeFile.content}
-                                theme="vs-dark"
-                                onMount={handleEditorDidMount}
-                                onChange={(value) => updateFileContent(value)}
-                                options={{
-                                    minimap: { enabled: false },
-                                    fontSize: 14,
-                                    fontFamily: 'Consolas, "Courier New", monospace',
-                                    lineNumbers: 'on',
-                                    scrollBeyondLastLine: false,
-                                    automaticLayout: true,
-                                    wordWrap: 'on',
-                                    tabSize: 2,
-                                    renderWhitespace: 'selection',
-                                    bracketPairColorization: { enabled: true },
-                                    padding: { top: 16, bottom: 16 }
-                                }}
-                            />
-                        ) : (
-                            <div className="flex items-center justify-center h-full text-slate-400">
-                                <p>No file selected</p>
-                            </div>
-                        )}
+                    <div className="flex-1 overflow-hidden grid grid-cols-2">
+                        <div className="overflow-auto border-r border-slate-700">
+                            {activeFile ? (
+                                <Editor
+                                    height="100%"
+                                    language={getLanguageFromFileName(activeFile.name)}
+                                    value={activeFile.content}
+                                    theme="vs-dark"
+                                    onChange={(value) => updateFileContent(value || '')}
+                                    options={{
+                                        minimap: { enabled: false },
+                                        fontSize: 14,
+                                        fontFamily: 'Consolas, "Courier New", monospace',
+                                        lineNumbers: 'on',
+                                        scrollBeyondLastLine: false,
+                                        automaticLayout: true,
+                                        wordWrap: 'on',
+                                        tabSize: 2,
+                                        renderWhitespace: 'selection',
+                                        bracketPairColorization: { enabled: true },
+                                        padding: { top: 16, bottom: 16 }
+                                    }}
+                                />
+                            ) : (
+                                <div className="flex items-center justify-center h-full text-slate-400">
+                                    <p>No file selected</p>
+                                </div>
+                            )}
+                        </div>
+                        <div className="flex flex-col bg-slate-950">
+                            {hasRunPreview ? (
+                                <>
+                                    <div className="p-2 border-b border-slate-700 flex gap-2">
+                                        <input
+                                            type="text"
+                                            value={editableUrl}
+                                            onChange={(e) => setEditableUrl(e.target.value)}
+                                            placeholder="Preview URL"
+                                            className="flex-1 px-2 py-1 rounded bg-slate-800 text-slate-200 text-xs border border-slate-700"
+                                        />
+                                        <button
+                                            onClick={() => {
+                                                setIframeDoc('')
+                                                setIframeUrl(editableUrl)
+                                            }}
+                                            className="px-2 py-1 text-xs bg-slate-700 text-slate-100 rounded"
+                                        >
+                                            Open
+                                        </button>
+                                        <button
+                                            onClick={closePreview}
+                                            className="px-2 py-1 text-xs bg-red-700 hover:bg-red-800 text-slate-100 rounded"
+                                        >
+                                            Close
+                                        </button>
+                                    </div>
+                                    <div className="flex-1 bg-white">
+                                        {iframeDoc ? (
+                                            <iframe title="preview" className="w-full h-full" srcDoc={iframeDoc} />
+                                        ) : (
+                                            <iframe title="preview" className="w-full h-full" src={iframeUrl || 'about:blank'} />
+                                        )}
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="flex-1 bg-slate-950" />
+                            )}
+                            <pre className="h-28 overflow-auto p-2 text-xs text-slate-300 bg-slate-900 border-t border-slate-700">{runLogs}</pre>
+                        </div>
                     </div>
                 </div>
             </div>

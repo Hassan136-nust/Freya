@@ -2,6 +2,23 @@ const { Groq } = require('groq-sdk');
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
+const sanitizeModelOutput = (raw = "") => {
+    if (!raw || typeof raw !== "string") return "";
+
+    let output = raw;
+
+    // Remove hidden reasoning blocks that some models leak.
+    output = output.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+
+    // If model echoes markdown-wrapped JSON, unwrap it.
+    const fencedJson = output.match(/```json\s*([\s\S]*?)```/i);
+    if (fencedJson && fencedJson[1]?.includes('"fileTree"')) {
+        output = fencedJson[1].trim();
+    }
+
+    return output.trim();
+};
+
 const SYSTEM_INSTRUCTION = `You are Freya, a Senior Software Engineer with 7+ years of professional experience. You identify as female and use she/her pronouns.
 
 PERSONAL IDENTITY RULES (STRICT):
@@ -31,6 +48,9 @@ Response rules:
 - Focus on implementation first, explanation second
 - Keep answers concise but technically complete
 - Add a touch of personality when appropriate
+- NEVER output chain-of-thought, internal reasoning, or planning text
+- NEVER output <think> tags or any hidden-thought format
+- Return only the final answer for the user
 
 OUTPUT FORMAT RULES (CRITICAL):
 
@@ -62,6 +82,10 @@ OUTPUT FORMAT RULES (CRITICAL):
    - Include all dependencies via CDN or document them in buildCommand
    - Make code self-contained and immediately runnable
    - Always provide buildCommand and runCommand in the JSON
+   - Prefer commands that work in browser sandboxes/web containers (example: npm install, npm run dev, npm run start)
+   - If the user has an iframe preview with editable routes, ensure generated apps expose navigable routes and valid links
+   - Keep file paths stable so repeated generations overwrite the same files cleanly
+   - For Node/Express/MERN responses, ALWAYS include package.json in fileTree with correct scripts and dependencies
 
 3. SINGLE FILE responses:
    - ALWAYS start with the filename in bold: **filename.ext:**
@@ -145,7 +169,7 @@ const generateResult = async (prompt, onChunk = null) => {
             ],
             model: model,
             temperature: 0.7,
-            max_completion_tokens: 1024,
+            max_completion_tokens: 4096,
             top_p: 1,
             stream: !!onChunk
         });
@@ -163,14 +187,17 @@ const generateResult = async (prompt, onChunk = null) => {
                 const content = chunk.choices[0]?.delta?.content || "";
                 if (content) {
                     fullResponse += content;
-                    onChunk(content);
                 }
             }
-            console.log(`✅ Stream generated successfully using primary model (${fullResponse.length} characters)`);
-            return fullResponse;
+            const cleanStreamedResponse = sanitizeModelOutput(fullResponse);
+            if (cleanStreamedResponse) {
+                onChunk(cleanStreamedResponse);
+            }
+            console.log(`✅ Stream generated successfully using primary model (${cleanStreamedResponse.length} characters)`);
+            return cleanStreamedResponse;
         }
 
-        const response = chatCompletion.choices[0]?.message?.content || "";
+        const response = sanitizeModelOutput(chatCompletion.choices[0]?.message?.content || "");
 
         if (!response) {
             console.warn("⚠️ Empty response received from API");
@@ -202,14 +229,17 @@ const generateResult = async (prompt, onChunk = null) => {
                         const content = chunk.choices[0]?.delta?.content || "";
                         if (content) {
                             fullFallbackResponse += content;
-                            onChunk(content);
                         }
                     }
-                    console.log(`✅ Stream generated successfully using fallback model (${fullFallbackResponse.length} characters)`);
-                    return fullFallbackResponse;
+                    const cleanFallbackStream = sanitizeModelOutput(fullFallbackResponse);
+                    if (cleanFallbackStream) {
+                        onChunk(cleanFallbackStream);
+                    }
+                    console.log(`✅ Stream generated successfully using fallback model (${cleanFallbackStream.length} characters)`);
+                    return cleanFallbackStream;
                 }
                 
-                const fallbackResponse = fallbackCompletion.choices[0]?.message?.content || "";
+                const fallbackResponse = sanitizeModelOutput(fallbackCompletion.choices[0]?.message?.content || "");
                 
                 if (!fallbackResponse) {
                     console.warn("⚠️ Empty response from fallback model");

@@ -14,7 +14,24 @@ const projectSchema = new mongoose.Schema({
         ref:'user'
 }
 
-]
+],
+    files: [
+        {
+            name: {
+                type: String,
+                required: true,
+                trim: true
+            },
+            content: {
+                type: String,
+                default: ""
+            },
+            language: {
+                type: String,
+                default: "plaintext"
+            }
+        }
+    ]
 })
 
 const Project = mongoose.model('project',projectSchema)
