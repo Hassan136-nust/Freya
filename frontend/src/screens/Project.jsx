@@ -315,6 +315,8 @@ const Project = () => {
             }
         }).catch((err) => {
             console.log('Error fetching project:', err.response?.data || err.message)
+            const errorMessage = err.response?.data?.message || err.response?.data?.error || 'Failed to create project.'
+            alert(errorMessage)
         })
     }, [projectId, sanitizeFileName, extractFilesFromMessage])
 
@@ -474,6 +476,8 @@ const Project = () => {
                 setAllUsers(availableUsers)
             }).catch((err) => {
                 console.log('Error fetching users:', err.response?.data || err.message)
+                const errorMessage = err.response?.data?.message || err.response?.data?.error || 'Failed to fetch users.'
+                alert(errorMessage)
             })
         }
     }, [isAddCollaboratorOpen, members])
@@ -491,6 +495,8 @@ const Project = () => {
             setSelectedUsers([])
         }).catch((err) => {
             console.log('Error adding collaborators:', err.response?.data || err.message)
+            const errorMessage = err.response?.data?.message || err.response?.data?.error || 'Failed to add collaborators.'
+            alert(errorMessage)
         })
     }
 
@@ -639,16 +645,22 @@ ${js ? `\n<script>\n${js}\n</script>\n` : ''}
     }
 
     return (
-        <div className="flex h-screen bg-slate-50">
+        <div className="flex h-screen overflow-hidden" style={{ backgroundColor: '#0a0a0a' }}>
             {/* Left Side - Chat Panel */}
-            <div className="w-96 bg-slate-100 border-r border-slate-300 flex flex-col">
+            <div className="w-96 border-r flex flex-col" style={{ backgroundColor: '#1a1a1a', borderColor: '#404040' }}>
                 {/* Chat Header */}
-                <div className="bg-slate-800 px-6 py-4 flex justify-between items-center gap-2">
-                    <h2 className="text-slate-50 text-lg font-semibold">Project Chat</h2>
+                <div className="px-6 py-4 flex justify-between items-center gap-2" style={{ backgroundColor: '#0a0a0a', borderBottom: '1px solid #404040' }}>
+                    <div className="flex items-center gap-2">
+                        <img src="/freya2.png" alt="Freya Logo" className="h-7 w-7 md:h-13 md:w-13 object-contain" />
+                        <h2 className="text-lg font-semibold" style={{ color: '#f5f5f5' }}>Project Chat</h2>
+                    </div>
                     <div className="flex items-center gap-2">
                         <button
                             onClick={() => setIsAddCollaboratorOpen(true)}
-                            className="px-3 py-2 bg-teal-600 hover:bg-teal-700 rounded-lg transition-colors text-slate-50 text-sm flex items-center gap-1"
+                            className="px-3 py-2 rounded-lg transition-colors text-sm flex items-center gap-1"
+                            style={{ backgroundColor: '#d4af37', color: '#0a0a0a' }}
+                            onMouseEnter={(e) => e.target.style.backgroundColor = '#f4cf47'}
+                            onMouseLeave={(e) => e.target.style.backgroundColor = '#d4af37'}
                         >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -657,7 +669,10 @@ ${js ? `\n<script>\n${js}\n</script>\n` : ''}
                         </button>
                         <button
                             onClick={() => setIsMembersPanelOpen(true)}
-                            className="flex items-center gap-2 px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors text-slate-200 text-sm"
+                            className="flex items-center gap-2 px-3 py-2 rounded-lg transition-colors text-sm"
+                            style={{ backgroundColor: '#404040', color: '#f5f5f5' }}
+                            onMouseEnter={(e) => e.target.style.backgroundColor = '#505050'}
+                            onMouseLeave={(e) => e.target.style.backgroundColor = '#404040'}
                         >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
@@ -668,15 +683,26 @@ ${js ? `\n<script>\n${js}\n</script>\n` : ''}
                 </div>
 
                 {/* Messages Area */}
-                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                <div className="flex-1 overflow-y-auto p-4 space-y-4" style={{ backgroundColor: '#1a1a1a' }}>
                     {messages.map((msg) => (
                         <div
                             key={msg._id}
                             className={`flex ${msg.sender === user?.email ? 'justify-end' : 'justify-start'}`}
                         >
-                            <div className={`max-w-[85%] ${msg.sender === user?.email ? 'bg-teal-600 text-slate-50' : msg.sender === 'Freya-AI' ? 'bg-black text-slate-50' : 'bg-slate-200 text-slate-800'} rounded-lg px-4 py-3 shadow-sm overflow-hidden`}>
-                                <p className="text-xs font-medium mb-1 opacity-75">{msg.sender}</p>
-                                <div className="text-sm markdown-content">
+                            <div 
+                                className={`max-w-[85%] rounded-lg px-4 py-3 shadow-sm overflow-hidden`} 
+                                style={{ 
+                                    backgroundColor: msg.sender === user?.email 
+                                        ? '#1a4d2e' // Dark green for sent messages (Gmail-style)
+                                        : msg.sender === 'Freya-AI' 
+                                            ? '#2a2a2a' // Dark gray for AI messages
+                                            : '#404040', // Medium gray for other users
+                                    color: '#f5f5f5', // Clear white text for all messages
+                                    border: `1px solid ${msg.sender === user?.email ? '#2d5f3f' : '#505050'}`
+                                }}
+                            >
+                                <p className="text-xs font-medium mb-1" style={{ color: '#d4d4d4' }}>{msg.sender}</p>
+                                <div className="text-sm markdown-content" style={{ color: '#f5f5f5' }}>
                                     {msg.message ? (
                                         <Markdown
                                             options={{
@@ -724,7 +750,7 @@ ${js ? `\n<script>\n${js}\n</script>\n` : ''}
                 </div>
 
                 {/* Message Input */}
-                <div className="bg-slate-200 border-t border-slate-300 p-4">
+                <div className="border-t p-4" style={{ backgroundColor: '#0a0a0a', borderColor: '#404040' }}>
                     <div className="flex gap-2">
                         <input
                             type="text"
@@ -732,11 +758,15 @@ ${js ? `\n<script>\n${js}\n</script>\n` : ''}
                             onChange={(e) => setMessage(e.target.value)}
                             onKeyPress={(e) => e.key === 'Enter' && send()}
                             placeholder="Type a message..."
-                            className="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 bg-slate-50 text-slate-900 text-sm"
+                            className="flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 text-sm"
+                            style={{ borderColor: '#404040', backgroundColor: '#2a2a2a', color: '#f5f5f5', outlineColor: '#d4af37' }}
                         />
                         <button
                             onClick={send}
-                            className="px-4 py-2 bg-teal-600 text-slate-50 rounded-lg hover:bg-teal-700 transition-colors shadow-sm flex-shrink-0"
+                            className="px-4 py-2 rounded-lg transition-colors shadow-sm flex-shrink-0"
+                            style={{ backgroundColor: '#d4af37', color: '#0a0a0a' }}
+                            onMouseEnter={(e) => e.target.style.backgroundColor = '#f4cf47'}
+                            onMouseLeave={(e) => e.target.style.backgroundColor = '#d4af37'}
                         >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
@@ -749,12 +779,15 @@ ${js ? `\n<script>\n${js}\n</script>\n` : ''}
             {/* Right Side - VS Code Interface */}
             <div className="flex-1 flex">
                 {/* File Explorer */}
-                <div className="w-64 bg-slate-800 border-r border-slate-700 flex flex-col">
-                    <div className="px-4 py-3 border-b border-slate-700 flex justify-between items-center">
-                        <h3 className="text-slate-200 text-sm font-semibold">EXPLORER</h3>
+                <div className="w-64 border-r flex flex-col" style={{ backgroundColor: '#0a0a0a', borderColor: '#404040' }}>
+                    <div className="px-4 py-3 border-b flex justify-between items-center" style={{ borderColor: '#404040' }}>
+                        <h3 className="text-sm font-semibold" style={{ color: '#f5f5f5' }}>EXPLORER</h3>
                         <button
                             onClick={createNewFile}
-                            className="text-teal-400 hover:text-teal-300 transition-colors"
+                            className="transition-colors"
+                            style={{ color: '#d4af37' }}
+                            onMouseEnter={(e) => e.target.style.color = '#f4cf47'}
+                            onMouseLeave={(e) => e.target.style.color = '#d4af37'}
                             title="New File"
                         >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -762,16 +795,30 @@ ${js ? `\n<script>\n${js}\n</script>\n` : ''}
                             </svg>
                         </button>
                     </div>
+                    
                     <div className="flex-1 overflow-y-auto">
                         {fileTree.length === 0 ? (
-                            <p className="text-slate-400 text-xs p-4">No files yet</p>
+                            <p className="text-xs p-4" style={{ color: '#d4d4d4' }}>No files yet</p>
                         ) : (
                             <div className="py-2">
                                 {fileTree.map((file) => (
                                     <div
                                         key={file.id}
-                                        className={`group px-4 py-2 text-sm cursor-pointer hover:bg-slate-700 flex items-center justify-between ${activeFile?.id === file.id ? 'bg-slate-700 text-teal-400' : 'text-slate-300'
-                                            }`}
+                                        className={`group px-4 py-2 text-sm cursor-pointer flex items-center justify-between`}
+                                        style={{ 
+                                            backgroundColor: activeFile?.id === file.id ? '#404040' : 'transparent',
+                                            color: activeFile?.id === file.id ? '#d4af37' : '#f5f5f5'
+                                        }}
+                                        onMouseEnter={(e) => {
+                                            if (activeFile?.id !== file.id) {
+                                                e.currentTarget.style.backgroundColor = '#2a2a2a'
+                                            }
+                                        }}
+                                        onMouseLeave={(e) => {
+                                            if (activeFile?.id !== file.id) {
+                                                e.currentTarget.style.backgroundColor = 'transparent'
+                                            }
+                                        }}
                                     >
                                         <div className="flex items-center gap-2" onClick={() => openFile(file)}>
                                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -784,7 +831,8 @@ ${js ? `\n<script>\n${js}\n</script>\n` : ''}
                                                 e.stopPropagation()
                                                 deleteFile(file.id, file.name)
                                             }}
-                                            className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300 transition-opacity"
+                                            className="opacity-0 group-hover:opacity-100 transition-opacity"
+                                            style={{ color: '#d4af37' }}
                                             title="Delete file"
                                         >
                                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -796,29 +844,70 @@ ${js ? `\n<script>\n${js}\n</script>\n` : ''}
                             </div>
                         )}
                     </div>
+                    
+                    {/* Play Chess Button at Bottom */}
+                    <div className="px-4 py-3 border-t" style={{ borderColor: '#404040' }}>
+                        <button
+                            onClick={() => window.open('https://chess-arena-game.onrender.com/', '_blank')}
+                            className="w-full px-3 py-2 rounded-lg transition-colors text-sm font-medium flex items-center justify-center gap-2"
+                            style={{ backgroundColor: '#d4af37', color: '#0a0a0a' }}
+                            onMouseEnter={(e) => e.target.style.backgroundColor = '#f4cf47'}
+                            onMouseLeave={(e) => e.target.style.backgroundColor = '#d4af37'}
+                        >
+                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M19 22H5v-2h14v2M17.16 8.26A2.5 2.5 0 0 0 15 3a2.5 2.5 0 0 0-2.16 5.26L9.5 11.5l-3-1.5v-2c.86-.5 1.5-1.43 1.5-2.5A2.5 2.5 0 0 0 5.5 3 2.5 2.5 0 0 0 3 5.5c0 1.07.64 2 1.5 2.5v2l3 1.5L7 13l-3.5 1.5v2c-.86.5-1.5 1.43-1.5 2.5A2.5 2.5 0 0 0 4.5 22 2.5 2.5 0 0 0 7 19.5c0-1.07-.64-2-1.5-2.5v-2L9 13.5l.5 1.5-1.5 3h8l-1.5-3 .5-1.5 3.5 1.5v2c-.86.5-1.5 1.43-1.5 2.5a2.5 2.5 0 0 0 2.5 2.5 2.5 2.5 0 0 0 2.5-2.5c0-1.07-.64-2-1.5-2.5v-2L17 13l-.5-1.5 3-1.5v-2c.86-.5 1.5-1.43 1.5-2.5A2.5 2.5 0 0 0 18.5 3a2.5 2.5 0 0 0-2.16 5.26z"/>
+                            </svg>
+                            <span>Play Chess</span>
+                        </button>
+                    </div>
                 </div>
 
                 {/* Editor Area */}
-                <div className="flex-1 flex flex-col bg-slate-900">
-                    <div className="px-4 py-2 border-b border-slate-700 bg-slate-800 flex items-center justify-between gap-3">
-                        <h3 className="text-slate-200 text-sm font-semibold">EDITOR</h3>
+                <div className="flex-1 flex flex-col" style={{ backgroundColor: '#0a0a0a' }}>
+                    <div className="px-4 py-2 border-b flex items-center justify-between gap-3" style={{ backgroundColor: '#0a0a0a', borderColor: '#404040' }}>
+                        <h3 className="text-sm font-semibold" style={{ color: '#f5f5f5' }}>EDITOR</h3>
                         <button
                             onClick={runInWebContainer}
                             disabled={isRunning || fileTree.length === 0}
-                            className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-slate-50 text-sm rounded disabled:bg-slate-500 disabled:cursor-not-allowed"
+                            className="px-3 py-1.5 text-sm rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                            style={{ backgroundColor: isRunning || fileTree.length === 0 ? '#404040' : '#d4af37', color: isRunning || fileTree.length === 0 ? '#d4d4d4' : '#0a0a0a' }}
+                            onMouseEnter={(e) => {
+                                if (!e.target.disabled) {
+                                    e.target.style.backgroundColor = '#f4cf47'
+                                }
+                            }}
+                            onMouseLeave={(e) => {
+                                if (!e.target.disabled) {
+                                    e.target.style.backgroundColor = '#d4af37'
+                                }
+                            }}
                         >
                             {isRunning ? 'Running...' : 'Run'}
                         </button>
                     </div>
                     {/* Tabs */}
                     {openFiles.length > 0 && (
-                        <div className="flex bg-slate-800 border-b border-slate-700 overflow-x-auto">
+                        <div className="flex border-b overflow-x-auto" style={{ backgroundColor: '#0a0a0a', borderColor: '#404040' }}>
                             {openFiles.map((file) => (
                                 <div
                                     key={file.id}
-                                    className={`flex items-center gap-2 px-4 py-2 border-r border-slate-700 cursor-pointer ${activeFile?.id === file.id ? 'bg-slate-900 text-teal-400' : 'text-slate-300 hover:bg-slate-700'
-                                        }`}
+                                    className={`flex items-center gap-2 px-4 py-2 border-r cursor-pointer`}
+                                    style={{ 
+                                        backgroundColor: activeFile?.id === file.id ? '#1a1a1a' : '#0a0a0a',
+                                        color: activeFile?.id === file.id ? '#d4af37' : '#f5f5f5',
+                                        borderColor: '#404040'
+                                    }}
                                     onClick={() => setActiveFile(file)}
+                                    onMouseEnter={(e) => {
+                                        if (activeFile?.id !== file.id) {
+                                            e.currentTarget.style.backgroundColor = '#2a2a2a'
+                                        }
+                                    }}
+                                    onMouseLeave={(e) => {
+                                        if (activeFile?.id !== file.id) {
+                                            e.currentTarget.style.backgroundColor = '#0a0a0a'
+                                        }
+                                    }}
                                 >
                                     <span className="text-sm">{file.name}</span>
                                     <button
@@ -826,7 +915,9 @@ ${js ? `\n<script>\n${js}\n</script>\n` : ''}
                                             e.stopPropagation()
                                             closeFile(file.id)
                                         }}
-                                        className="text-slate-400 hover:text-slate-200"
+                                        style={{ color: '#d4d4d4' }}
+                                        onMouseEnter={(e) => e.target.style.color = '#f5f5f5'}
+                                        onMouseLeave={(e) => e.target.style.color = '#d4d4d4'}
                                     >
                                         ×
                                     </button>
@@ -837,7 +928,7 @@ ${js ? `\n<script>\n${js}\n</script>\n` : ''}
 
                     {/* Monaco Editor */}
                     <div className="flex-1 overflow-hidden grid grid-cols-2">
-                        <div className="overflow-auto border-r border-slate-700">
+                        <div className="overflow-auto border-r" style={{ borderColor: '#404040' }}>
                             {activeFile ? (
                                 <Editor
                                     height="100%"
@@ -860,34 +951,39 @@ ${js ? `\n<script>\n${js}\n</script>\n` : ''}
                                     }}
                                 />
                             ) : (
-                                <div className="flex items-center justify-center h-full text-slate-400">
+                                <div className="flex items-center justify-center h-full" style={{ color: '#d4d4d4' }}>
                                     <p>No file selected</p>
                                 </div>
                             )}
                         </div>
-                        <div className="flex flex-col bg-slate-950">
+                        <div className="flex flex-col" style={{ backgroundColor: '#0a0a0a' }}>
                             {hasRunPreview ? (
                                 <>
-                                    <div className="p-2 border-b border-slate-700 flex gap-2">
+                                    <div className="p-2 border-b flex gap-2" style={{ borderColor: '#404040' }}>
                                         <input
                                             type="text"
                                             value={editableUrl}
                                             onChange={(e) => setEditableUrl(e.target.value)}
                                             placeholder="Preview URL"
-                                            className="flex-1 px-2 py-1 rounded bg-slate-800 text-slate-200 text-xs border border-slate-700"
+                                            className="flex-1 px-2 py-1 rounded text-xs border"
+                                            style={{ backgroundColor: '#1a1a1a', color: '#f5f5f5', borderColor: '#404040' }}
                                         />
                                         <button
                                             onClick={() => {
                                                 setIframeDoc('')
                                                 setIframeUrl(editableUrl)
                                             }}
-                                            className="px-2 py-1 text-xs bg-slate-700 text-slate-100 rounded"
+                                            className="px-2 py-1 text-xs rounded"
+                                            style={{ backgroundColor: '#404040', color: '#f5f5f5' }}
                                         >
                                             Open
                                         </button>
                                         <button
                                             onClick={closePreview}
-                                            className="px-2 py-1 text-xs bg-red-700 hover:bg-red-800 text-slate-100 rounded"
+                                            className="px-2 py-1 text-xs rounded"
+                                            style={{ backgroundColor: '#d4af37', color: '#0a0a0a' }}
+                                            onMouseEnter={(e) => e.target.style.backgroundColor = '#f4cf47'}
+                                            onMouseLeave={(e) => e.target.style.backgroundColor = '#d4af37'}
                                         >
                                             Close
                                         </button>
@@ -901,9 +997,9 @@ ${js ? `\n<script>\n${js}\n</script>\n` : ''}
                                     </div>
                                 </>
                             ) : (
-                                <div className="flex-1 bg-slate-950" />
+                                <div className="flex-1" style={{ backgroundColor: '#0a0a0a' }} />
                             )}
-                            <pre className="h-28 overflow-auto p-2 text-xs text-slate-300 bg-slate-900 border-t border-slate-700">{runLogs}</pre>
+                            <pre className="h-28 overflow-auto p-2 text-xs border-t" style={{ color: '#f5f5f5', backgroundColor: '#1a1a1a', borderColor: '#404040' }}>{runLogs}</pre>
                         </div>
                     </div>
                 </div>
@@ -912,18 +1008,23 @@ ${js ? `\n<script>\n${js}\n</script>\n` : ''}
             {/* Add Collaborators Modal */}
             {isAddCollaboratorOpen && (
                 <div
-                    className="fixed inset-0 bg-slate-900 bg-opacity-50 z-50 flex items-center justify-center p-4"
+                    className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                    style={{ backgroundColor: 'rgba(0, 0, 0, 0.8)' }}
                     onClick={() => setIsAddCollaboratorOpen(false)}
                 >
                     <div
-                        className="bg-slate-100 rounded-lg shadow-xl max-w-md w-full max-h-[80vh] flex flex-col"
+                        className="rounded-lg shadow-xl max-w-md w-full max-h-[80vh] flex flex-col"
+                        style={{ backgroundColor: '#2a2a2a', border: '1px solid #404040' }}
                         onClick={(e) => e.stopPropagation()}
                     >
-                        <div className="bg-slate-800 px-6 py-4 flex justify-between items-center rounded-t-lg">
-                            <h3 className="text-slate-50 text-lg font-semibold">Add Collaborators</h3>
+                        <div className="px-6 py-4 flex justify-between items-center rounded-t-lg" style={{ backgroundColor: '#0a0a0a' }}>
+                            <h3 className="text-lg font-semibold" style={{ color: '#f5f5f5' }}>Add Collaborators</h3>
                             <button
                                 onClick={() => setIsAddCollaboratorOpen(false)}
-                                className="text-slate-300 hover:text-slate-50 text-2xl leading-none"
+                                className="text-2xl leading-none"
+                                style={{ color: '#d4d4d4' }}
+                                onMouseEnter={(e) => e.target.style.color = '#f5f5f5'}
+                                onMouseLeave={(e) => e.target.style.color = '#d4d4d4'}
                             >
                                 ×
                             </button>
@@ -932,25 +1033,26 @@ ${js ? `\n<script>\n${js}\n</script>\n` : ''}
                         <div className="flex-1 overflow-y-auto p-4">
                             <div className="space-y-2">
                                 {allUsers.length === 0 ? (
-                                    <p className="text-slate-500 text-center py-8">Loading users...</p>
+                                    <p className="text-center py-8" style={{ color: '#d4d4d4' }}>Loading users...</p>
                                 ) : (
                                     allUsers.map((user) => (
                                         <div
                                             key={user._id}
                                             onClick={() => toggleUserSelection(user._id)}
-                                            className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${selectedUsers.includes(user._id)
-                                                ? 'bg-teal-100 border-2 border-teal-600'
-                                                : 'bg-slate-200 hover:bg-slate-300 border-2 border-transparent'
-                                                }`}
+                                            className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors border-2`}
+                                            style={{ 
+                                                backgroundColor: '#1a1a1a',
+                                                borderColor: selectedUsers.includes(user._id) ? '#d4af37' : '#404040'
+                                            }}
                                         >
-                                            <div className="w-10 h-10 bg-teal-600 rounded-full flex items-center justify-center text-slate-50 font-semibold flex-shrink-0">
+                                            <div className="w-10 h-10 rounded-full flex items-center justify-center font-semibold flex-shrink-0" style={{ backgroundColor: '#d4af37', color: '#0a0a0a' }}>
                                                 {user.email.charAt(0).toUpperCase()}
                                             </div>
                                             <div className="flex-1 min-w-0">
-                                                <p className="text-sm font-medium text-slate-800 truncate">{user.email}</p>
+                                                <p className="text-sm font-medium truncate" style={{ color: '#f5f5f5' }}>{user.email}</p>
                                             </div>
                                             {selectedUsers.includes(user._id) && (
-                                                <svg className="w-5 h-5 text-teal-600" fill="currentColor" viewBox="0 0 20 20">
+                                                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" style={{ color: '#d4af37' }}>
                                                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                                                 </svg>
                                             )}
@@ -960,17 +1062,31 @@ ${js ? `\n<script>\n${js}\n</script>\n` : ''}
                             </div>
                         </div>
 
-                        <div className="p-4 border-t border-slate-300 flex gap-3">
+                        <div className="p-4 border-t flex gap-3" style={{ borderColor: '#404040' }}>
                             <button
                                 onClick={() => setIsAddCollaboratorOpen(false)}
-                                className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors"
+                                className="flex-1 px-4 py-2 border rounded-lg transition-colors"
+                                style={{ borderColor: '#404040', color: '#f5f5f5', backgroundColor: 'transparent' }}
+                                onMouseEnter={(e) => e.target.style.backgroundColor = '#404040'}
+                                onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
                             >
                                 Cancel
                             </button>
                             <button
                                 onClick={handleAddCollaborators}
                                 disabled={selectedUsers.length === 0}
-                                className="flex-1 px-4 py-2 bg-teal-600 text-slate-50 rounded-lg hover:bg-teal-700 transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed"
+                                className="flex-1 px-4 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                style={{ backgroundColor: selectedUsers.length === 0 ? '#404040' : '#d4af37', color: selectedUsers.length === 0 ? '#d4d4d4' : '#0a0a0a' }}
+                                onMouseEnter={(e) => {
+                                    if (!e.target.disabled) {
+                                        e.target.style.backgroundColor = '#f4cf47'
+                                    }
+                                }}
+                                onMouseLeave={(e) => {
+                                    if (!e.target.disabled) {
+                                        e.target.style.backgroundColor = '#d4af37'
+                                    }
+                                }}
                             >
                                 Add {selectedUsers.length > 0 && `(${selectedUsers.length})`}
                             </button>
@@ -980,12 +1096,15 @@ ${js ? `\n<script>\n${js}\n</script>\n` : ''}
             )}
 
             {/* Members Side Panel */}
-            <div className={`fixed right-0 top-0 h-full w-80 bg-slate-100 shadow-2xl border-l border-slate-300 transform transition-transform duration-300 ease-in-out z-50 ${isMembersPanelOpen ? 'translate-x-0' : 'translate-x-full'}`}>
-                <div className="bg-slate-800 px-6 py-4 flex justify-between items-center">
-                    <h2 className="text-slate-50 text-lg font-semibold">Members</h2>
+            <div className={`fixed right-0 top-0 h-full w-80 shadow-2xl border-l transform transition-transform duration-300 ease-in-out z-50 ${isMembersPanelOpen ? 'translate-x-0' : 'translate-x-full'}`} style={{ backgroundColor: '#2a2a2a', borderColor: '#404040' }}>
+                <div className="px-6 py-4 flex justify-between items-center" style={{ backgroundColor: '#0a0a0a' }}>
+                    <h2 className="text-lg font-semibold" style={{ color: '#f5f5f5' }}>Members</h2>
                     <button
                         onClick={() => setIsMembersPanelOpen(false)}
-                        className="text-slate-300 hover:text-slate-50 text-3xl leading-none transition-colors"
+                        className="text-3xl leading-none transition-colors"
+                        style={{ color: '#d4d4d4' }}
+                        onMouseEnter={(e) => e.target.style.color = '#f5f5f5'}
+                        onMouseLeave={(e) => e.target.style.color = '#d4d4d4'}
                     >
                         ×
                     </button>
@@ -994,19 +1113,22 @@ ${js ? `\n<script>\n${js}\n</script>\n` : ''}
                 <div className="overflow-y-auto p-4 h-full pb-20">
                     <div className="space-y-3">
                         {members.length === 0 ? (
-                            <p className="text-slate-500 text-center py-8">No members yet</p>
+                            <p className="text-center py-8" style={{ color: '#d4d4d4' }}>No members yet</p>
                         ) : (
                             members.map((member, index) => (
                                 <div
                                     key={member._id || index}
-                                    className="bg-slate-200 rounded-lg px-4 py-3 hover:bg-slate-300 transition-colors"
+                                    className="rounded-lg px-4 py-3 transition-colors"
+                                    style={{ backgroundColor: '#1a1a1a', border: '1px solid #404040' }}
+                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#404040'}
+                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#1a1a1a'}
                                 >
                                     <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 bg-teal-600 rounded-full flex items-center justify-center text-slate-50 font-semibold flex-shrink-0">
+                                        <div className="w-10 h-10 rounded-full flex items-center justify-center font-semibold flex-shrink-0" style={{ backgroundColor: '#d4af37', color: '#0a0a0a' }}>
                                             {member.email ? member.email.charAt(0).toUpperCase() : 'U'}
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-medium text-slate-800 truncate">{member.email || 'Unknown User'}</p>
+                                            <p className="text-sm font-medium truncate" style={{ color: '#f5f5f5' }}>{member.email || 'Unknown User'}</p>
                                         </div>
                                     </div>
                                 </div>
@@ -1019,7 +1141,8 @@ ${js ? `\n<script>\n${js}\n</script>\n` : ''}
             {/* Overlay */}
             {isMembersPanelOpen && (
                 <div
-                    className="fixed inset-0 bg-slate-900 bg-opacity-40 z-40 transition-opacity duration-300"
+                    className="fixed inset-0 z-40 transition-opacity duration-300"
+                    style={{ backgroundColor: 'rgba(0, 0, 0, 0.7)' }}
                     onClick={() => setIsMembersPanelOpen(false)}
                 ></div>
             )}
