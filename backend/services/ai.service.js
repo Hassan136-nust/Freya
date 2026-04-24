@@ -1,6 +1,5 @@
 const { Groq } = require('groq-sdk');
 
-// Ensure you have GROQ_API_KEY set in your environment variables
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 const SYSTEM_INSTRUCTION = `You are Freya, a Senior Software Engineer with 7+ years of professional experience. You identify as female and use she/her pronouns.
@@ -158,21 +157,30 @@ const generateResult = async (prompt, onChunk = null) => {
         return "Hey! Freya here. I need a valid question or code snippet to help you. What are we working on today?";
     }
 
-    try {
-        console.log(`📡 Sending request to Groq API with prompt: "${prompt.substring(0, 50)}${prompt.length > 50 ? '...' : ''}"`);
-
+    // Helper function to make API calls
+    const makeRequest = async (model, isFallback = false) => {
+        console.log(`📡 Sending request to ${model} with prompt: "${prompt.substring(0, 50)}${prompt.length > 50 ? '...' : ''}"`);
+        
         const chatCompletion = await groq.chat.completions.create({
             messages: [
                 { role: "system", content: SYSTEM_INSTRUCTION },
+                ...(isFallback ? [{ role: "system", content: "IMPORTANT: Start your response by saying: '⚠️ Using less powerful model due to limit issues. My answers might be slightly less detailed, but I'll still help you!'" }] : []),
                 { role: "user", content: prompt }
             ],
-            model: "llama-3.3-70b-versatile",
+            model: model,
             temperature: 0.7,
             max_completion_tokens: 1024,
             top_p: 1,
             stream: !!onChunk
         });
+        
+        return chatCompletion;
+    };
 
+    try {
+        // Try primary model first
+        const chatCompletion = await makeRequest("llama-3.3-70b-versatile", false);
+        
         if (onChunk) {
             let fullResponse = "";
             for await (const chunk of chatCompletion) {
@@ -182,7 +190,7 @@ const generateResult = async (prompt, onChunk = null) => {
                     onChunk(content);
                 }
             }
-            console.log(`✅ Stream generated successfully (${fullResponse.length} characters)`);
+            console.log(`✅ Stream generated successfully using primary model (${fullResponse.length} characters)`);
             return fullResponse;
         }
 
@@ -193,25 +201,62 @@ const generateResult = async (prompt, onChunk = null) => {
             return "Hey, Freya here! I received an empty response. Could you rephrase your question?";
         }
 
-        console.log(`✅ Response generated successfully (${response.length} characters)`);
+        console.log(`✅ Response generated successfully using primary model (${response.length} characters)`);
         return response;
 
     } catch (error) {
-        console.error("❌ AI Generation Error Details:", {
+        console.error("❌ Primary Model Error Details:", {
             message: error.message,
             status: error.status,
             statusText: error.statusText,
-            name: error.name,
-            stack: error.stack
+            name: error.name
         });
 
-        // User-friendly error messages based on error type
-        if (error.message.includes('API key')) {
-            return "Freya here! 🔑 Looks like there's an issue with the API key. Please check your GROQ_API_KEY environment variable.";
+        // Check if it's a rate limit error (429) or quota exceeded
+        if (error.status === 429 || error.message.includes('rate limit') || error.message.includes('quota')) {
+            console.log("⚠️ Rate limit hit on primary model, falling back to Qwen model...");
+            
+            try {
+                // Try fallback model (Qwen)
+                const fallbackCompletion = await makeRequest("qwen/qwen3-32b", true);
+                
+                if (onChunk) {
+                    let fullFallbackResponse = "";
+                    for await (const chunk of fallbackCompletion) {
+                        const content = chunk.choices[0]?.delta?.content || "";
+                        if (content) {
+                            fullFallbackResponse += content;
+                            onChunk(content);
+                        }
+                    }
+                    console.log(`✅ Stream generated successfully using fallback model (${fullFallbackResponse.length} characters)`);
+                    return fullFallbackResponse;
+                }
+                
+                const fallbackResponse = fallbackCompletion.choices[0]?.message?.content || "";
+                
+                if (!fallbackResponse) {
+                    console.warn("⚠️ Empty response from fallback model");
+                    return "Hey, Freya here! ⚠️ I'm currently using Qwen (limited capability mode) due to high demand, but I still got an empty response. Could you try again?";
+                }
+                
+                console.log(`✅ Response generated successfully using fallback model (${fallbackResponse.length} characters)`);
+                return fallbackResponse;
+                
+            } catch (fallbackError) {
+                console.error("❌ Fallback Model Error:", {
+                    message: fallbackError.message,
+                    status: fallbackError.status
+                });
+                
+                // Both models failed
+                return "Hey, Freya here! 😅 Both Llama and Qwen are currently overloaded. Give me a few seconds and try again - I promise I'm not ignoring you!";
+            }
         }
 
-        if (error.status === 429) {
-            return "Hey, Freya here! 🚦 We've hit the rate limit. Give it a moment and try again - I'm not going anywhere!";
+        // Handle other errors
+        if (error.message.includes('API key')) {
+            return "Freya here! 🔑 Looks like there's an issue with the API key. Please check your GROQ_API_KEY environment variable.";
         }
 
         if (error.status === 500 || error.status === 503) {
