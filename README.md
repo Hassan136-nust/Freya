@@ -929,24 +929,6 @@ This project is licensed under the **ISC License**.
 - **Discussions**: [GitHub Discussions](https://github.com/yourusername/freya/discussions)
 - **Email**: support@freya.dev
 
----
-
-## 🗺 Roadmap
-
-### Upcoming Features
-
-- [ ] **Version Control**: Git integration for project history
-- [ ] **Terminal Access**: Full terminal in the browser
-- [ ] **Themes**: Multiple color themes
-- [ ] **Extensions**: Plugin system for custom features
-- [ ] **Mobile Support**: Responsive design for tablets
-- [ ] **Video Chat**: Built-in video calls for pair programming
-- [ ] **Code Review**: PR-like code review system
-- [ ] **Deployment**: One-click deployment to Vercel/Netlify
-- [ ] **AI Models**: Support for multiple AI providers
-- [ ] **Offline Mode**: PWA with offline capabilities
-
----
 
 ## 📊 Performance
 
