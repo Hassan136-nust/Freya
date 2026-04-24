@@ -17,7 +17,10 @@ export const initializeSocket=(projectId)=>{
 }
 
 export const receiveMessage = (eventName,cb)=>{
-    socketInstance.on(eventName,cb)
+    if (socketInstance) {
+        socketInstance.off(eventName)
+        socketInstance.on(eventName,cb)
+    }
 }
 
  export const sendMessage = (eventName,data)=>{
