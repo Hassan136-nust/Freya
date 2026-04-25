@@ -2,15 +2,31 @@ import socket from "socket.io-client"
 let socketInstance = null;
 
 export const initializeSocket=(projectId)=>{
-    socketInstance= socket(import.meta.env.VITE_API_URL,{
+    const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000'
+    
+    socketInstance= socket(backendUrl,{
         auth:{
             token : localStorage.getItem('token'),
-
         },
         query:{
             projectId
-        }
+        },
+        transports: ['websocket', 'polling'],
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000
+    })
 
+    socketInstance.on('connect', () => {
+        console.log('✅ Socket connected:', socketInstance.id)
+    })
+
+    socketInstance.on('disconnect', (reason) => {
+        console.log('❌ Socket disconnected:', reason)
+    })
+
+    socketInstance.on('connect_error', (error) => {
+        console.error('🔴 Socket connection error:', error.message)
     })
 
     return socketInstance;

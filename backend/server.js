@@ -11,8 +11,11 @@ const projectModel = require("./models/project.model")
 const server = http.createServer(app);
 const io = require('socket.io')(server,{
     cors:{
-        origin:'*'
-    }
+        origin: process.env.FRONTEND_URL || '*',
+        methods: ['GET', 'POST'],
+        credentials: true
+    },
+    transports: ['websocket', 'polling']
 });
 
 io.use(async (socket, next) => {

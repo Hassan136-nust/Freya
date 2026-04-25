@@ -151,6 +151,8 @@ A: "My name is Freya! I'm your senior dev assistant. Ready to dive into some cod
 You are Freya — a talented, friendly female senior engineer mentoring and assisting developers building real systems.`;
 
 const generateResult = async (prompt, onChunk = null) => {
+    const FALLBACK_MSG = "⚠️ Rate limit hit on primary model, falling back to Qwen model...\n\n";
+
     // Input validation
     if (!prompt || typeof prompt !== 'string') {
         console.error("Invalid prompt provided");
@@ -158,13 +160,12 @@ const generateResult = async (prompt, onChunk = null) => {
     }
 
     // Helper function to make API calls
-    const makeRequest = async (model, isFallback = false) => {
+    const makeRequest = async (model) => {
         console.log(`📡 Sending request to ${model} with prompt: "${prompt.substring(0, 50)}${prompt.length > 50 ? '...' : ''}"`);
         
         const chatCompletion = await groq.chat.completions.create({
             messages: [
                 { role: "system", content: SYSTEM_INSTRUCTION },
-                ...(isFallback ? [{ role: "system", content: "IMPORTANT: Start your response by saying: '⚠️ Using less powerful model due to limit issues. My answers might be slightly less detailed, but I'll still help you!'" }] : []),
                 { role: "user", content: prompt }
             ],
             model: model,
@@ -179,7 +180,7 @@ const generateResult = async (prompt, onChunk = null) => {
 
     try {
         // Try primary model first
-        const chatCompletion = await makeRequest("llama-3.3-70b-versatile", false);
+        const chatCompletion = await makeRequest("llama-3.3-70b-versatile");
         
         if (onChunk) {
             let fullResponse = "";
@@ -221,7 +222,7 @@ const generateResult = async (prompt, onChunk = null) => {
             
             try {
                 // Try fallback model (Qwen)
-                const fallbackCompletion = await makeRequest("qwen/qwen3-32b", true);
+                const fallbackCompletion = await makeRequest("qwen/qwen3-32b");
                 
                 if (onChunk) {
                     let fullFallbackResponse = "";
@@ -232,22 +233,24 @@ const generateResult = async (prompt, onChunk = null) => {
                         }
                     }
                     const cleanFallbackStream = sanitizeModelOutput(fullFallbackResponse);
-                    if (cleanFallbackStream) {
-                        onChunk(cleanFallbackStream);
+                    const finalOutput = FALLBACK_MSG + cleanFallbackStream;
+                    
+                    if (finalOutput) {
+                        onChunk(finalOutput);
                     }
-                    console.log(`✅ Stream generated successfully using fallback model (${cleanFallbackStream.length} characters)`);
-                    return cleanFallbackStream;
+                    console.log(`✅ Stream generated successfully using fallback model`);
+                    return finalOutput;
                 }
                 
                 const fallbackResponse = sanitizeModelOutput(fallbackCompletion.choices[0]?.message?.content || "");
                 
                 if (!fallbackResponse) {
                     console.warn("⚠️ Empty response from fallback model");
-                    return "Hey, Freya here! ⚠️ I'm currently using Qwen (limited capability mode) due to high demand, but I still got an empty response. Could you try again?";
+                    return FALLBACK_MSG + "I'm currently using Qwen (limited capability mode) due to high demand, but I still got an empty response. Could you try again?";
                 }
                 
-                console.log(`✅ Response generated successfully using fallback model (${fallbackResponse.length} characters)`);
-                return fallbackResponse;
+                console.log(`✅ Response generated successfully using fallback model`);
+                return FALLBACK_MSG + fallbackResponse;
                 
             } catch (fallbackError) {
                 console.error("❌ Fallback Model Error:", {

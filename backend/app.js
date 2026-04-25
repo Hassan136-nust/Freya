@@ -12,7 +12,11 @@ const cors = require ("cors");
 
 connectToDB();
 app.use(morgan("dev"))
-app.use(cors())
+app.use(cors({
+    origin: process.env.FRONTEND_URL || '*',
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+}))
 app.use(cookieParser())
 app.use(express.json())
 app.use(express.urlencoded({extended:true}))
