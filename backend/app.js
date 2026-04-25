@@ -12,6 +12,11 @@ const cors = require ("cors");
 
 connectToDB();
 
+app.get("/", (req, res) => {
+    res.send("Freya API running");
+});
+
+
 app.get("/health", (req, res) => {
     res.status(200).json({
         status: "ok",
