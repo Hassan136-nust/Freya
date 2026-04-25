@@ -90,7 +90,7 @@ const updatedProject = await projectModel.findOneAndUpdate({
     }
 },{
     new:true
-})
+}).populate("users")
 return updatedProject
 }
 const getProjectById = async ({projectId})=>{
@@ -135,7 +135,7 @@ const updateProjectFiles = async ({ projectId, userId, files }) => {
         $set: { files: sanitizedFiles }
     }, {
         new: true
-    });
+    }).populate("users");
 
     if (!updatedProject) {
         throw new Error("user does not belong to project");
