@@ -103,6 +103,18 @@ const Home = () => {
                     </div>
                     <div className="flex items-center gap-2 md:gap-4">
                         <span className="text-xs md:text-sm truncate max-w-[120px] md:max-w-none" style={{ color: '#d4d4d4' }}>{user?.email}</span>
+                        <button
+                            onClick={() => {
+                                localStorage.removeItem('token')
+                                window.location.href = '/login'
+                            }}
+                            className="px-3 py-1.5 md:px-4 md:py-2 rounded-lg transition-colors text-xs md:text-sm font-medium"
+                            style={{ backgroundColor: '#d4af37', color: '#0a0a0a' }}
+                            onMouseEnter={(e) => e.target.style.backgroundColor = '#f4cf47'}
+                            onMouseLeave={(e) => e.target.style.backgroundColor = '#d4af37'}
+                        >
+                            Logout
+                        </button>
                     </div>
                 </div>
             </header>
