@@ -7,7 +7,7 @@ const Home = () => {
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [projectName, setProjectName] = useState('')
     const [projects, setProjects] = useState([])
-    const { user } = useContext(UserContext)
+    const { user, setUser } = useContext(UserContext)
     const navigate = useNavigate()
 
     // Collaborator Modal State
@@ -106,7 +106,8 @@ const Home = () => {
                         <button
                             onClick={() => {
                                 localStorage.removeItem('token')
-                                window.location.href = '/login'
+                                setUser(null)
+                                navigate('/login')
                             }}
                             className="px-3 py-1.5 md:px-4 md:py-2 rounded-lg transition-colors text-xs md:text-sm font-medium"
                             style={{ backgroundColor: '#d4af37', color: '#0a0a0a' }}
