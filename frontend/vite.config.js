@@ -9,12 +9,17 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
-    copyPublicDir: true
+    copyPublicDir: true,
+    target: 'esnext'
+  },
+  optimizeDeps: {
+    exclude: ['@webcontainer/api']
   },
   server: {
     headers: {
       "Cross-Origin-Embedder-Policy": "require-corp",
       "Cross-Origin-Opener-Policy": "same-origin",
+      "Cross-Origin-Resource-Policy": "cross-origin"
     },
     proxy: {
       '/cdn': {
