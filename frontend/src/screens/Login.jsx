@@ -33,7 +33,7 @@ axios.post('/users/login',{
     <div className="min-h-screen flex items-center justify-center px-4 py-8" style={{ backgroundColor: '#1a1a1a' }}>
       <div className="max-w-md w-full space-y-6 md:space-y-8">
         <div className="flex flex-col items-center">
-          <img src="./freya2.png" alt="Freya Logo" className="h-17 w-17 md:h-27 md:w-27 object-contain mb-6" />
+          <img src="/freya2.png" alt="Freya Logo" className="h-17 w-17 md:h-27 md:w-27 object-contain mb-6" />
           <h2 className="text-center text-2xl md:text-3xl font-bold" style={{ color: '#f5f5f5' }}>
             Sign in to your account
           </h2>

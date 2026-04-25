@@ -95,7 +95,7 @@ const Home = () => {
             <header className="py-4 px-4 md:py-6 md:px-8 shadow-md" style={{ backgroundColor: '#0a0a0a', color: '#f5f5f5' }}>
                 <div className="max-w-7xl mx-auto flex justify-between items-center">
                     <div className="flex items-center gap-3 md:gap-4">
-                        <img src="./freya2.png" alt="Freya Logo" className="h-12 w-12 md:h-16 md:w-16 object-contain" />
+                        <img src="/freya2.png" alt="Freya Logo" className="h-12 w-12 md:h-16 md:w-16 object-contain" />
                         <div>
                             <h1 className="text-2xl md:text-4xl font-bold tracking-tight">FREYA</h1>
                             <p className="mt-1 text-xs md:text-sm hidden sm:block" style={{ color: '#d4d4d4' }}>AI Agent for Code Generation & Online Chat</p>
