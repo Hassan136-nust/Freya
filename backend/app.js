@@ -11,6 +11,16 @@ const app = express();
 const cors = require ("cors");
 
 connectToDB();
+
+app.get("/health", (req, res) => {
+    res.status(200).json({
+        status: "ok",
+        service: "freya-backend",
+        uptime: process.uptime(),
+        timestamp: new Date().toISOString()
+    });
+});
+
 app.use(morgan("dev"))
 app.use(cors({
     origin: process.env.FRONTEND_URL || '*',
