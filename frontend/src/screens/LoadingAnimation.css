@@ -1,3 +1,6 @@
+/* Import Hyper Oxide Font */
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
+
 /* Main Container - NO SCROLL */
 .animation-container {
   position: fixed;
@@ -9,9 +12,6 @@
   background: #000000;
   perspective: 1000px;
 }
-
-/* Import Hyper Oxide Font */
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
 
 /* Intro Overlay */
 .intro-overlay {

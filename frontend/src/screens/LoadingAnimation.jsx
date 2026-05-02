@@ -97,6 +97,9 @@ const LoadingAnimation = () => {
   useEffect(() => {
     if (!imagesLoaded || showIntro) return;
 
+    let touchStartY = 0;
+    let touchEndY = 0;
+
     const handleWheel = (e) => {
       e.preventDefault();
 
@@ -108,11 +111,45 @@ const LoadingAnimation = () => {
       targetProgressRef.current = Math.max(0, Math.min(7, targetProgressRef.current));
     };
 
+    const handleTouchStart = (e) => {
+      touchStartY = e.touches[0].clientY;
+    };
+
+    const handleTouchMove = (e) => {
+      e.preventDefault();
+      touchEndY = e.touches[0].clientY;
+      
+      // Calculate swipe distance
+      const swipeDistance = touchStartY - touchEndY;
+      
+      // Sensitivity for touch (adjust as needed)
+      const touchSensitivity = 0.008;
+      targetProgressRef.current += swipeDistance * touchSensitivity;
+
+      // Clamp between 0 and 7
+      targetProgressRef.current = Math.max(0, Math.min(7, targetProgressRef.current));
+      
+      // Reset for next touch move
+      touchStartY = touchEndY;
+    };
+
+    const handleTouchEnd = () => {
+      touchStartY = 0;
+      touchEndY = 0;
+    };
+
     const container = containerRef.current;
     if (container) {
       container.addEventListener('wheel', handleWheel, { passive: false });
+      container.addEventListener('touchstart', handleTouchStart, { passive: true });
+      container.addEventListener('touchmove', handleTouchMove, { passive: false });
+      container.addEventListener('touchend', handleTouchEnd, { passive: true });
+      
       return () => {
         container.removeEventListener('wheel', handleWheel);
+        container.removeEventListener('touchstart', handleTouchStart);
+        container.removeEventListener('touchmove', handleTouchMove);
+        container.removeEventListener('touchend', handleTouchEnd);
       };
     }
   }, [imagesLoaded, showIntro]);
