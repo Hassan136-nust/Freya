@@ -39,17 +39,25 @@ const LoadingAnimation = () => {
     return () => clearInterval(typingInterval);
   }, [showIntro]);
 
-  // Preload all images
+  // Preload all images with error handling
   useEffect(() => {
     let loaded = 0;
+    let failed = 0;
 
     for (let i = 0; i < totalFrames; i++) {
       const img = new Image();
       img.onload = () => {
         loaded++;
         setLoadedCount(loaded);
-        if (loaded === totalFrames) {
+        if (loaded + failed === totalFrames) {
           setImagesLoaded(true);
+        }
+      };
+      img.onerror = () => {
+        failed++;
+        console.warn(`Failed to load frame ${i}`);
+        if (loaded + failed === totalFrames) {
+          setImagesLoaded(true); // Continue even if some images fail
         }
       };
       img.src = `/animations/animate_in_cinamtic_style_202605021652_${String(i).padStart(3, '0')}.png`;
@@ -61,35 +69,45 @@ const LoadingAnimation = () => {
     if (!imagesLoaded || showIntro) return;
 
     let lastUpdateTime = Date.now();
-    const targetFPS = 60;
+    const targetFPS = 30; // Reduced from 60 for deployed stability
     const frameTime = 1000 / targetFPS;
+    let isRunning = true;
 
     const animate = () => {
+      if (!isRunning) return;
+
       const now = Date.now();
       
       // Only update if enough time has passed for next frame
       if (now - lastUpdateTime >= frameTime) {
-        // Calculate velocity for ultra-smooth momentum
-        const diff = targetProgressRef.current - frameProgressRef.current;
-        frameProgressRef.current += diff * 0.08; // Smoother easing
+        try {
+          // Calculate velocity for ultra-smooth momentum
+          const diff = targetProgressRef.current - frameProgressRef.current;
+          frameProgressRef.current += diff * 0.08;
 
-        // Get integer frame and blend amount
-        const floorFrame = Math.floor(frameProgressRef.current);
-        const blendAmount = frameProgressRef.current - floorFrame;
+          // Ensure bounds
+          frameProgressRef.current = Math.max(0, Math.min(totalFrames - 1, frameProgressRef.current));
 
-        // Calculate frame numbers (0 to 81)
-        const frame1 = Math.max(0, Math.min(totalFrames - 1, floorFrame));
-        const frame2 = Math.max(0, Math.min(totalFrames - 1, floorFrame + 1));
-        const showBtn = frameProgressRef.current >= totalFrames - 1.5;
+          // Get integer frame and blend amount
+          const floorFrame = Math.floor(frameProgressRef.current);
+          const blendAmount = frameProgressRef.current - floorFrame;
 
-        // Only update state if values actually changed (larger threshold to reduce updates)
-        if (frame1 !== lastFrameRef.current || Math.abs(blendAmount - lastOpacityRef.current) > 0.02 || showBtn !== frameState.showButton) {
-          lastFrameRef.current = frame1;
-          lastOpacityRef.current = blendAmount;
-          setFrameState({ frame: frame1, nextFrame: frame2, opacity: blendAmount, showButton: showBtn });
+          // Calculate frame numbers (0 to 81)
+          const frame1 = Math.max(0, Math.min(totalFrames - 1, floorFrame));
+          const frame2 = Math.max(0, Math.min(totalFrames - 1, floorFrame + 1));
+          const showBtn = frameProgressRef.current >= totalFrames - 1.5;
+
+          // Only update state if values actually changed
+          if (frame1 !== lastFrameRef.current || Math.abs(blendAmount - lastOpacityRef.current) > 0.02 || showBtn !== frameState.showButton) {
+            lastFrameRef.current = frame1;
+            lastOpacityRef.current = blendAmount;
+            setFrameState({ frame: frame1, nextFrame: frame2, opacity: blendAmount, showButton: showBtn });
+          }
+
+          lastUpdateTime = now;
+        } catch (error) {
+          console.error('Animation error:', error);
         }
-
-        lastUpdateTime = now;
       }
 
       animationFrameRef.current = requestAnimationFrame(animate);
@@ -98,6 +116,7 @@ const LoadingAnimation = () => {
     animationFrameRef.current = requestAnimationFrame(animate);
 
     return () => {
+      isRunning = false;
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
       }
@@ -110,8 +129,10 @@ const LoadingAnimation = () => {
 
     let touchStartY = 0;
     let touchEndY = 0;
+    let isScrolling = false;
 
     const handleWheel = (e) => {
+      if (isScrolling) return;
       e.preventDefault();
 
       // Higher sensitivity for faster scrolling
@@ -120,30 +141,28 @@ const LoadingAnimation = () => {
 
       // Clamp between 0 and totalFrames-1 with safety bounds
       targetProgressRef.current = Math.max(0, Math.min(totalFrames - 1, targetProgressRef.current));
-      
-      // Ensure frameProgressRef stays in bounds
       frameProgressRef.current = Math.max(0, Math.min(totalFrames - 1, frameProgressRef.current));
     };
 
     const handleTouchStart = (e) => {
       touchStartY = e.touches[0].clientY;
+      isScrolling = true;
     };
 
     const handleTouchMove = (e) => {
+      if (!isScrolling) return;
       e.preventDefault();
       touchEndY = e.touches[0].clientY;
       
       // Calculate swipe distance
       const swipeDistance = touchStartY - touchEndY;
       
-      // Sensitivity for touch - increased for faster response
+      // Sensitivity for touch
       const touchSensitivity = 0.015;
       targetProgressRef.current += swipeDistance * touchSensitivity;
 
       // Clamp between 0 and totalFrames-1 with safety bounds
       targetProgressRef.current = Math.max(0, Math.min(totalFrames - 1, targetProgressRef.current));
-      
-      // Ensure frameProgressRef stays in bounds
       frameProgressRef.current = Math.max(0, Math.min(totalFrames - 1, frameProgressRef.current));
       
       // Reset for next touch move
@@ -153,6 +172,7 @@ const LoadingAnimation = () => {
     const handleTouchEnd = () => {
       touchStartY = 0;
       touchEndY = 0;
+      isScrolling = false;
     };
 
     const container = containerRef.current;
