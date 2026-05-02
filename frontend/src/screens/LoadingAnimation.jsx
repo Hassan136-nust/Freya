@@ -8,7 +8,7 @@ const LoadingAnimation = () => {
   const [loadedCount, setLoadedCount] = useState(0);
   const [frameState, setFrameState] = useState({ frame: 8, nextFrame: 8, opacity: 0, showButton: false });
   const [showIntro, setShowIntro] = useState(true);
-  const [introComplete, setIntroComplete] = useState(false);
+  const [displayedText, setDisplayedText] = useState('');
   const navigate = useNavigate();
 
   const totalFrames = 8;
@@ -17,6 +17,27 @@ const LoadingAnimation = () => {
   const targetProgressRef = useRef(0);
   const lastFrameRef = useRef(8);
   const lastOpacityRef = useRef(0);
+
+  const fullText = 'WELCOME to FREYA\nAI Powered Coding Agent\nStart Coding Now';
+
+  // Typing animation
+  useEffect(() => {
+    if (!showIntro) return;
+
+    let currentIndex = 0;
+    const typingInterval = setInterval(() => {
+      if (currentIndex <= fullText.length) {
+        setDisplayedText(fullText.slice(0, currentIndex));
+        currentIndex++;
+      } else {
+        clearInterval(typingInterval);
+        // Wait 2 seconds then hide intro
+        setTimeout(() => setShowIntro(false), 2000);
+      }
+    }, 50);
+
+    return () => clearInterval(typingInterval);
+  }, [showIntro]);
 
   // Preload all images
   useEffect(() => {
@@ -35,16 +56,9 @@ const LoadingAnimation = () => {
     }
   }, []);
 
-  // Handle intro animation completion
-  useEffect(() => {
-    if (!showIntro) {
-      setIntroComplete(true);
-    }
-  }, [showIntro]);
-
   // Smooth animation loop with momentum - optimized
   useEffect(() => {
-    if (!imagesLoaded || !introComplete) return;
+    if (!imagesLoaded || showIntro) return;
 
     const animate = () => {
       // Calculate velocity for ultra-smooth momentum
@@ -77,11 +91,11 @@ const LoadingAnimation = () => {
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [imagesLoaded, introComplete]);
+  }, [imagesLoaded, showIntro]);
 
   // Handle scroll with smooth momentum
   useEffect(() => {
-    if (!imagesLoaded || !introComplete) return;
+    if (!imagesLoaded || showIntro) return;
 
     const handleWheel = (e) => {
       e.preventDefault();
@@ -101,95 +115,37 @@ const LoadingAnimation = () => {
         container.removeEventListener('wheel', handleWheel);
       };
     }
-  }, [imagesLoaded, introComplete]);
+  }, [imagesLoaded, showIntro]);
 
   return (
     <div className="animation-container" ref={containerRef}>
-      {/* Intro Animation */}
+      {/* Intro with Typing Animation */}
       {showIntro && (
         <div className="intro-overlay">
-          {/* Falling circle */}
-          <div className="falling-circle"></div>
-
-          {/* Blast lines */}
-          <div className="blast-container">
-            {Array.from({ length: 12 }, (_, i) => (
-              <div
-                key={`blast-line-${i}`}
-                className="blast-line"
-                style={{
-                  transform: `rotate(${(i * 30)}deg)`,
-                }}
-              ></div>
-            ))}
-          </div>
-
-          {/* Falling particles during intro */}
+          {/* Falling particles */}
           <div className="intro-particles">
-            {Array.from({ length: 12 }, (_, i) => (
+            {Array.from({ length: 15 }, (_, i) => (
               <div
                 key={`intro-particle-${i}`}
                 className="intro-particle"
                 style={{
-                  left: `${(i * 8.33)}%`,
-                  animationDelay: `${0.3 + i * 0.05}s`,
+                  left: `${Math.random() * 100}%`,
+                  animationDelay: `${Math.random() * 0.5}s`,
                 }}
               />
             ))}
           </div>
 
-          {/* Close intro after animation */}
-          <div
-            className="intro-close-trigger"
-            onAnimationEnd={() => setShowIntro(false)}
-          ></div>
-        </div>
-      )}
-
-      {/* Loading Indicator */}
-      {!imagesLoaded && (
-        <div className="loading-indicator">
-          <div className="loading-spinner"></div>
-          <p className="loading-text">Loading cinematic experience...</p>
-          <div className="loading-progress">
-            <div 
-              className="loading-progress-bar"
-              style={{ width: `${(loadedCount / totalFrames) * 100}%` }}
-            ></div>
+          {/* Typing Text */}
+          <div className="typing-container">
+            <p className="typing-text">{displayedText}</p>
+            <span className="typing-cursor"></span>
           </div>
         </div>
       )}
 
-      {/* Background */}
-      <div className="bg-container">
-        <div className="bg-gradient"></div>
-        <div className="bg-grid"></div>
-      </div>
-
-      {/* Floating particles */}
-      <div className="particles-container">
-        {Array.from({ length: 8 }, (_, i) => (
-          <div
-            key={`particle-${i}`}
-            className="particle"
-            style={{
-              left: `${(i * 12.5)}%`,
-              animationDelay: `${i * 0.3}s`,
-              animationDuration: `7s`,
-            }}
-          />
-        ))}
-      </div>
-
-      {/* Light streaks */}
-      <div className="light-streaks">
-        <div className="streak streak-1"></div>
-        <div className="streak streak-2"></div>
-        <div className="streak streak-3"></div>
-      </div>
-
       {/* Main content */}
-      <div className={`content-wrapper ${imagesLoaded && introComplete ? 'loaded' : ''}`}>
+      <div className={`content-wrapper ${imagesLoaded && !showIntro ? 'loaded' : ''}`}>
         {/* Image display with smooth blending */}
         <div className="image-container">
           {/* Current frame */}
@@ -236,8 +192,7 @@ const LoadingAnimation = () => {
         {/* Button overlay */}
         <div className={`button-overlay ${frameState.showButton ? 'show' : ''}`}>
           <div className="button-wrapper">
-            <h1 className="brand-title">FREYA</h1>
-            <p className="brand-subtitle">AI-Powered Collaborative Code Editor</p>
+          
             <button 
               className="cta-button"
               onClick={() => navigate('/home')}
@@ -249,13 +204,13 @@ const LoadingAnimation = () => {
         </div>
 
         {/* Scroll hint */}
-        <div className={`scroll-hint ${imagesLoaded && !frameState.showButton && introComplete ? 'show' : ''}`}>
+        <div className={`scroll-hint ${imagesLoaded && !frameState.showButton && !showIntro ? 'show' : ''}`}>
           <div className="hint-arrow"></div>
           <p>Scroll to explore</p>
         </div>
 
         {/* Frame counter */}
-        <div className={`frame-counter ${imagesLoaded && introComplete ? 'show' : ''}`}>
+        <div className={`frame-counter ${imagesLoaded && !showIntro ? 'show' : ''}`}>
           <span>{frameState.frame}</span> / <span>{totalFrames}</span>
         </div>
       </div>

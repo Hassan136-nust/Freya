@@ -1,31 +1,42 @@
-import { useState,useContext } from 'react'
-import { Link,useNavigate } from 'react-router-dom'
+import { useState, useContext, useEffect } from 'react'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import axios from '../config/axios'
 
 import { UserContext } from '../context/UserContext'
 function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const navigate = useNavigate();
+  const location = useLocation();
+  const {setUser}= useContext(UserContext);
 
-const {setUser}= useContext(UserContext);
+  // Handle browser back button
+  useEffect(() => {
+    // Push a history entry so back button works
+    window.history.pushState(null, null, window.location.href);
 
-    const navigate = useNavigate();
+    const handlePopState = () => {
+      navigate('/', { replace: true });
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [navigate]);
+
   const handleSubmit = (e) => {
     e.preventDefault()
-axios.post('/users/login',{
-    email,password
-}).then((res)=>{
-
-    localStorage.setItem('token',res.data.token)
-    setUser(res.data.user)
-    
-    navigate('/');
-    console.log(res.data)
-}).catch((err)=>{
-    console.log(err)
-    const errorMessage = err.response?.data?.message || err.response?.data?.error || 'Login failed. Please try again.'
-    alert(errorMessage)
-})
+    axios.post('/users/login',{
+        email,password
+    }).then((res)=>{
+        localStorage.setItem('token',res.data.token)
+        setUser(res.data.user)
+        navigate('/home');
+        console.log(res.data)
+    }).catch((err)=>{
+        console.log(err)
+        const errorMessage = err.response?.data?.message || err.response?.data?.error || 'Login failed. Please try again.'
+        alert(errorMessage)
+    })
     console.log('Login:', { email, password })
   }
 
